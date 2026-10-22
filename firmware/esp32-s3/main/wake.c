@@ -40,6 +40,18 @@ static void press_home(uint16_t ms)
 
 static void run_wake(const hk_wake *w)
 {
+    // A request for *only* the power button is a raw button press (used by
+    // the host for "put the console to sleep"), regardless of state.
+    if (w->methods == HK_WAKE_POWER_BUTTON) {
+        if (!board_has_power_button()) {
+            report(HK_WAKE_POWER_BUTTON, HK_WAKE_RESULT_UNSUPPORTED);
+            return;
+        }
+        board_power_button_pulse(w->press_ms ? w->press_ms : 150);
+        report(HK_WAKE_POWER_BUTTON, HK_WAKE_RESULT_SENT);
+        return;
+    }
+
     if (console_usb_state() == HK_USB_ACTIVE) {
         report(0, HK_WAKE_RESULT_ALREADY_AWAKE);
         // Awake bus but the host still asked: the console may be on the

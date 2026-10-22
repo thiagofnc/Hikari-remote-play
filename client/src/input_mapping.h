@@ -1,0 +1,118 @@
+#pragma once
+// Controller mapping: PC-side physical inputs -> Switch controller inputs.
+//
+// The client's input thread produces a source-agnostic RawPadState (from
+// XInput, Windows.Gaming.Input or raw HID) plus the keyboard state, and
+// InputMapping::apply() turns them into the network PadState. Mappings are
+// edited in the Controller Settings window and persisted per profile.
+
+#include <array>
+#include <bitset>
+#include <cstdint>
+#include <string>
+#include <vector>
+
+#include "hikari/config.h"
+#include "hikari/net_protocol.h"
+
+namespace hikari {
+
+// Physical inputs. Gamepad inputs use *positional* Xbox naming (South = the
+// bottom face button on any pad: Xbox A, PlayStation Cross, Switch B).
+enum class PhysicalInput : uint16_t {
+    None = 0,
+    PadSouth,
+    PadEast,
+    PadWest,
+    PadNorth,
+    PadLB,
+    PadRB,
+    PadLT,  // analog trigger, treated as pressed past 25%
+    PadRT,
+    PadBack,   // View / Share(PS4) / Create(PS5) / Minus
+    PadStart,  // Menu / Options / Plus
+    PadGuide,  // Xbox / PS / Home
+    PadShare,  // Xbox Series Share / PS touchpad click / Capture
+    PadLS,     // left stick click
+    PadRS,
+    PadDpadUp,
+    PadDpadDown,
+    PadDpadLeft,
+    PadDpadRight,
+    PadLStickUp,
+    PadLStickDown,
+    PadLStickLeft,
+    PadLStickRight,
+    PadRStickUp,
+    PadRStickDown,
+    PadRStickLeft,
+    PadRStickRight,
+    PadCount,
+    // Keyboard: KeyBase + Win32 virtual-key code (0x01..0xFE).
+    KeyBase = 0x100,
+};
+
+inline PhysicalInput key_input(unsigned vk) { return static_cast<PhysicalInput>(0x100 + (vk & 0xFF)); }
+inline bool is_key(PhysicalInput p) { return static_cast<uint16_t>(p) >= 0x100; }
+inline unsigned key_vk(PhysicalInput p) { return static_cast<uint16_t>(p) - 0x100; }
+
+// Switch-side inputs that can be bound.
+enum class SwitchInput : uint8_t {
+    A, B, X, Y,
+    L, R, ZL, ZR,
+    Plus, Minus, Home, Capture,
+    LStickClick, RStickClick,
+    DpadUp, DpadDown, DpadLeft, DpadRight,
+    LStickUp, LStickDown, LStickLeft, LStickRight,
+    RStickUp, RStickDown, RStickLeft, RStickRight,
+    Count
+};
+constexpr size_t kSwitchInputCount = static_cast<size_t>(SwitchInput::Count);
+
+// What the input thread sees from the active physical controller.
+struct RawPadState {
+    bool connected = false;
+    std::string device_name;  // e.g. "Xbox Wireless Controller", "DualSense"
+    std::bitset<static_cast<size_t>(PhysicalInput::PadCount)> pressed;  // digital inputs (incl. stick directions past 50%)
+    int16_t lx = 0, ly = 0, rx = 0, ry = 0;  // +Y = up
+    uint8_t lt = 0, rt = 0;
+};
+
+// Keys currently held (Win32 VK codes), only while the client window has focus.
+struct KeyboardState {
+    std::bitset<256> down;
+};
+
+struct InputMapping {
+    std::string profile = "Default";
+    // binding[i] = physical input that drives SwitchInput i (None = unbound).
+    std::array<PhysicalInput, kSwitchInputCount> pad{};       // gamepad bindings
+    std::array<PhysicalInput, kSwitchInputCount> keyboard{};  // keyboard bindings
+    // When true, the physical sticks drive the Switch sticks directly with full
+    // analog precision (stick-direction bindings above are then only used for
+    // keyboard / remapped buttons).
+    bool analog_sticks = true;
+    bool analog_triggers = true;  // pass LT/RT through as analog ZL/ZR values
+    float stick_deadzone = 0.0f;  // 0..0.3; the console applies its own deadzone
+    bool keyboard_enabled = true;
+
+    // Positional layout (Xbox A -> Switch B, Xbox B -> Switch A, ...): buttons
+    // stay where Switch muscle memory expects them.
+    static InputMapping defaults_positional();
+    // Label layout (Xbox A -> Switch A, ...).
+    static InputMapping defaults_by_label();
+
+    proto::PadState apply(const RawPadState& pad, const KeyboardState& kb) const;
+
+    void load(const Config& cfg, const std::string& section);
+    void save(Config& cfg, const std::string& section) const;
+};
+
+const char* to_string(SwitchInput s);
+std::string to_string(PhysicalInput p);  // "South (A)", "Key W", ...
+PhysicalInput physical_from_string(const std::string& s);
+
+// Profiles are stored in client.ini as [mapping.<name>].
+std::vector<std::string> list_mapping_profiles(const Config& cfg);
+
+}  // namespace hikari

@@ -125,6 +125,8 @@ enum hk_usb_state {
 #define HK_WAKE_POWER_BUTTON (1u << 2)      /* GPIO pulse into an optocoupler/relay across the power button */
 #define HK_WAKE_HDMI_CEC (1u << 3)          /* reserved: CEC <Image View On>/<User Control Pressed: Power> */
 
+/* A request whose mask is exactly HK_WAKE_POWER_BUTTON is a raw power-button
+ * press in any console state (the host uses it to put the console to sleep). */
 typedef struct hk_wake {
     uint8_t methods;           /* HK_WAKE_* mask */
     uint16_t press_ms;         /* power-button pulse / HOME hold time */
