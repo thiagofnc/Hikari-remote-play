@@ -12,6 +12,7 @@
 #include "hikari/clock.h"
 #include "hikari/log.h"
 #include "hikari/system.h"
+#include "hikari/tailscale.h"
 #include "hk_link.h"
 
 namespace hikari {
@@ -106,7 +107,8 @@ void ClientApp::connect()
     const std::string host = cfg_->get("client", "host");
     if (host.empty()) return;
     net_.connect(host, cfg_->get("client", "pairing_code"), preset_,
-                 static_cast<uint32_t>(cfg_->get_int("client", "max_kbps", 0)));
+                 static_cast<uint32_t>(cfg_->get_int("client", "max_kbps", 0)),
+                 cfg_->get("client", "host_fallback"));
 }
 
 void ClientApp::preview_state(const std::string& state)
@@ -178,7 +180,13 @@ int ClientApp::run(Config& cfg, ClientHooks hooks)
     if (hooks_.preview.empty()) {
     ClientNetEvents ev;
     ev.state = [this](ConnState s, const std::string&) {
-        if (s != ConnState::Connected && screen_ == Screen::Stream) toast("Connection lost - reconnecting...", 2.0);
+        if (s == ConnState::Replaced) {
+            toast("Another device took over your host", 4.0);
+            PostMessageW(hwnd_, WM_HIKARI_ACTION, kActStop, 0);
+        } else if (s != ConnState::Connected && screen_ == Screen::Stream) {
+            toast("Connection lost - reconnecting...", 2.0);
+        }
+        if (s == ConnState::Connected) path_wake_.set();
         PostMessageW(hwnd_, WM_HIKARI_REFRESH, 0, 0);
     };
     ev.stream_config = [this](const proto::StreamConfig& c) {
@@ -224,6 +232,7 @@ int ClientApp::run(Config& cfg, ClientHooks hooks)
 
     running_ = true;
     render_ = std::thread(&ClientApp::render_thread, this);
+    if (hooks_.preview.empty()) path_ = std::thread(&ClientApp::path_thread, this);
 
     MSG m;
     while (GetMessageW(&m, nullptr, 0, 0) > 0) {
@@ -232,7 +241,9 @@ int ClientApp::run(Config& cfg, ClientHooks hooks)
     }
 
     running_ = false;
+    path_wake_.set();
     if (render_.joinable()) render_.join();
+    if (path_.joinable()) path_.join();
     input_.set_sending(false);
     Sleep(20);
     input_.stop();
@@ -242,6 +253,38 @@ int ClientApp::run(Config& cfg, ClientHooks hooks)
     cfg.set_bool("client", "stats_overlay", show_stats_);
     if (hooks_.preview.empty()) cfg.save();
     return 0;
+}
+
+void ClientApp::path_thread()
+{
+    // Tailscale falls back to its DERP relays when the two PCs cannot reach
+    // each other directly; that works but adds latency and caps bandwidth.
+    // Ask the local Tailscale client which route we got and say so.
+    set_thread_role(ThreadRole::Background, "hikari-path");
+    while (running_) {
+        int state = 0;
+        std::string relay;
+        const std::string ip = net_.state() == ConnState::Connected ? net_.remote_ip() : std::string();
+        if (is_tailscale_ipv4(ip)) {
+            const TailscalePath path = tailscale_path_to(ip);
+            if (path.known) {
+                state = path.direct ? 1 : 2;
+                relay = path.relay;
+            }
+        }
+        {
+            std::lock_guard<std::mutex> lk(mu_);
+            path_relay_ = relay;
+        }
+        const int before = path_state_.exchange(state);
+        if (state == 2 && before != 2 && !relay_toast_shown_) {
+            relay_toast_shown_ = true;
+            toast("Tailscale is relaying this connection - expect extra latency", 5.0);
+        }
+        // Direct paths usually form within seconds of traffic starting, so
+        // look again soon while relayed, rarely once direct.
+        path_wake_.wait(state == 1 ? 60000 : state == 2 ? 10000 : 5000);
+    }
 }
 
 void ClientApp::toast(const std::string& msg, double seconds)
@@ -309,6 +352,9 @@ void ClientApp::do_action(int action)
         break;
     case kActChangeRole:
         if (hooks_.change_role && hooks_.change_role(hwnd_)) PostMessageW(hwnd_, WM_CLOSE, 0, 0);
+        break;
+    case kActTakeOver:
+        connect();  // the host hands the session to whoever connects last
         break;
     case kActWake: net_.power(proto::PowerAction::Wake); break;
     case kActSleep: net_.power(proto::PowerAction::Sleep); break;
@@ -741,17 +787,26 @@ void ClientApp::draw_lobby(ui::Painter& p, const Rect& r)
     } else {
         const bool failed=have && st.phase==SessionPhase::Failed;
         const bool setup=conn==ConnState::Rejected || conn==ConnState::Idle;
-        const int action=setup?kActSettings:failed?kActRetry:kActPlay;
+        const bool replaced=conn==ConnState::Replaced;
+        const bool unreachable=conn==ConnState::Unreachable;
+        const int action=replaced?kActTakeOver:setup?kActSettings:failed?kActRetry:kActPlay;
         if (ui_.focus_id < 0) ui_.focus_id=action;
         if(failed) {
             p.text(st.message[0]?st.message:"Could not start the session",{x,y-p.s(12),text_right,y+p.s(34)},p.s(13),ui::rgb(th::kBad),Weight::Regular,Align::Leading,Align::Center,true);
             y+=p.s(40);
         }
-        if(p.button(ui_,action,{x,y,x+p.s(164),y+p.s(38)},setup?"Set up connection":failed?"Try again":"Play",ButtonStyle::Primary,setup||have)) post_action(action);
-        p.text(setup?"Enter your host address and pairing code.":failed?"Check the host, then retry.":have?"Or press A on your controller.":"Keep the host app running on your other PC.",
-               {x,y+p.s(46),text_right,y+p.s(80)},p.s(12),ui::rgb(th::kText3),Weight::Regular,Align::Leading,Align::Leading,true);
+        const char* label=replaced?"Take over":setup?"Set up connection":failed?"Try again":"Play";
+        if(p.button(ui_,action,{x,y,x+p.s(164),y+p.s(38)},label,ButtonStyle::Primary,setup||replaced||have)) post_action(action);
+        const char* hint=replaced?"Another device is connected to your host. Take over to play here; the other device will be disconnected."
+            :conn==ConnState::Rejected?"The host did not accept the pairing code. Paste a fresh invite from the host."
+            :setup?"Paste the invite from your host PC."
+            :unreachable?"No answer from the host. Check that Hikari is running there, both PCs are signed in to Tailscale, and the host allowed Hikari through Windows Firewall."
+            :failed?"Check the host, then retry.":have?"Or press A on your controller.":"Keep the host app running on your other PC.";
+        p.text(hint,{x,y+p.s(46),text_right,y+p.s(unreachable||replaced?112:80)},p.s(12),ui::rgb(unreachable?th::kWarn:th::kText3),Weight::Regular,Align::Leading,Align::Leading,true);
         if(have && !failed && st.issue!=proto::HostIssue::None)
             p.text(proto::to_string(st.issue),{x,y+p.s(82),text_right,y+p.s(106)},p.s(12),ui::rgb(th::kWarn));
+        else if(have && path_state_==2)
+            p.text("Relayed by Tailscale - latency will be higher than usual.",{x,y+p.s(82),text_right,y+p.s(106)},p.s(12),ui::rgb(th::kWarn));
     }
     const float prefs=session_bottom+p.s(16), row_start=prefs+p.s(60);
     p.text("Stream preference",{x,prefs+p.s(16),inner,prefs+p.s(42)},p.s(15),ui::rgb(th::kText),Weight::SemiBold);
@@ -774,7 +829,12 @@ void ClientApp::draw_lobby(ui::Painter& p, const Rect& r)
     }
     p.text("Host connection",{sx,top+p.s(18),sr,top+p.s(44)},p.s(15),ui::rgb(th::kText),Weight::SemiBold);
     p.pill(sx,top+p.s(56),connected?"Connected":to_string(conn),connected?th::kGood:th::kWarn);
-    p.text(host.empty()?"No host configured":host,{sx,top+p.s(96),sr,top+p.s(120)},p.s(13),ui::rgb(th::kText));
+    p.text(host.empty()?"No host configured":host,{sx,top+p.s(92),sr,top+p.s(114)},p.s(13),ui::rgb(th::kText));
+    if(connected && path_state_!=0) {
+        const bool direct=path_state_==1;
+        p.text(direct?"Tailscale: direct connection":"Tailscale: relayed"+(path_relay_.empty()?std::string():" via "+path_relay_)+" - higher latency",
+               {sx,top+p.s(114),sr,top+p.s(136)},p.s(12),ui::rgb(direct?th::kText2:th::kWarn));
+    }
     p.line(sx,top+p.s(140),sr,top+p.s(140),ui::rgb(th::kBorder),p.s(1));
     const char* labels[]={"Controller bridge","Capture card","HDMI signal","Hardware encoder"};
     const bool checks[]={bool(st.bridge_ok),bool(st.capture_ok),bool(st.signal_ok),bool(st.encoder_ok)};
@@ -793,7 +853,8 @@ void ClientApp::draw_lobby(ui::Painter& p, const Rect& r)
     // State changes can replace Play with Retry, Settings or Cancel.
     if (std::none_of(ui_.hits.begin(), ui_.hits.end(),
             [this](const auto& hit) { return hit.first == ui_.focus_id; })) {
-        const int preferred = progress ? kActStop : conn == ConnState::Rejected || conn == ConnState::Idle
+        const int preferred = progress ? kActStop : conn == ConnState::Replaced ? kActTakeOver
+            : conn == ConnState::Rejected || conn == ConnState::Idle
             ? kActSettings : have && st.phase == SessionPhase::Failed ? kActRetry : kActPlay;
         const auto next = std::find_if(ui_.hits.begin(), ui_.hits.end(),
             [preferred](const auto& hit) { return hit.first == preferred; });
@@ -820,7 +881,7 @@ void ClientApp::draw_stream_overlay(ui::Painter& p, const Rect& r)
     }
     if (show_stats_) draw_stats(p, r);
 
-    if (hooks_.preview.empty() && net_.state() != ConnState::Connected) {
+    if (hooks_.preview.empty() && net_.state() != ConnState::Connected && net_.state() != ConnState::Replaced) {
         p.fill(r, ui::rgb(0x000000, 0.55f));
         p.spinner(r.cx(), r.cy() - p.s(20), p.s(22), ui::rgb(th::kAccent));
         p.text("Reconnecting...", Rect{r.l, r.cy() + p.s(16), r.r, r.cy() + p.s(46)}, p.s(18), ui::rgb(th::kText),
@@ -876,6 +937,15 @@ void ClientApp::draw_stats(ui::Painter& p, const Rect& r)
         {"Audio", fmt("buffer %u ms  |  underruns %llu", audio_.buffered_ms(),
                       static_cast<unsigned long long>(audio_.underruns()))},
     };
+    if (path_state_ != 0) {
+        std::string relay;
+        {
+            std::lock_guard<std::mutex> lk(mu_);
+            relay = path_relay_;
+        }
+        rows.insert(rows.begin() + 3, {"Route", path_state_ == 1 ? std::string("Tailscale direct")
+                                                                 : "Tailscale relay " + relay + " (adds latency)"});
+    }
 
     const float lh = p.s(21), lw = p.s(118);
     const float w = std::min(r.w() - p.s(32), p.s(700));

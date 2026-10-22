@@ -9,6 +9,7 @@
 
 #include "hikari/clock.h"
 #include "hikari/crypto.h"
+#include "hikari/invite.h"
 #include "hikari/log.h"
 #include "hikari/system.h"
 #include "hikari/tailscale.h"
@@ -206,7 +207,61 @@ bool HostApp::start(Config& cfg)
     setup_thread_ = std::thread(&HostApp::setup_thread, this);
     encoder_thread_ = std::thread(&HostApp::encoder_thread, this);
     orchestrator_thread_ = std::thread(&HostApp::orchestrator_thread, this);
+    sysinfo_thread_ = std::thread(&HostApp::sysinfo_thread, this);
+
+    // A host must survive reboots: start with Windows unless the user opted out.
+    if (cfg.get("host", "autostart").empty()) {
+        cfg.set_bool("host", "autostart", set_autostart(true));
+        cfg.save();
+    } else if (cfg.get_bool("host", "autostart", true) && !autostart_enabled()) {
+        set_autostart(true);  // Hikari.exe moved since the entry was written
+    }
     return true;
+}
+
+void HostApp::sysinfo_thread()
+{
+    // Slow-changing facts the host window shows. Some calls block (Tailscale
+    // CLI, firewall COM), so they live here instead of in snapshot().
+    set_thread_role(ThreadRole::Background, "hikari-sysinfo");
+    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    while (running_) {
+        const std::string name = tailscale_dns_name();
+        const FirewallStatus fw = firewall_status(port_);
+        const int lid = lid_close_action();
+        {
+            std::lock_guard<std::mutex> lk(sysinfo_mu_);
+            tailscale_name_ = name;
+            firewall_ = fw;
+            lid_action_ = lid;
+        }
+        sysinfo_wake_.wait(15000);
+    }
+    CoUninitialize();
+}
+
+bool HostApp::allow_through_firewall()
+{
+    const bool ok = run_elevated_setup("firewall", port_);
+    sysinfo_wake_.set();
+    return ok;
+}
+
+bool HostApp::keep_awake_with_lid_closed()
+{
+    const bool ok = keep_awake_on_lid_close(true);
+    sysinfo_wake_.set();
+    return ok;
+}
+
+bool HostApp::set_start_with_windows(bool on)
+{
+    const bool ok = set_autostart(on);
+    if (ok) {
+        cfg_->set_bool("host", "autostart", on);
+        cfg_->save();
+    }
+    return ok;
 }
 
 void HostApp::stop()
@@ -214,7 +269,9 @@ void HostApp::stop()
     if (!running_.exchange(false)) return;
     wake_.set();
     enc_wake_.set();
+    sysinfo_wake_.set();
     if (setup_thread_.joinable()) setup_thread_.join();
+    if (sysinfo_thread_.joinable()) sysinfo_thread_.join();
     if (orchestrator_thread_.joinable()) orchestrator_thread_.join();
     if (encoder_thread_.joinable()) encoder_thread_.join();
     bridge_.publish_neutral();
@@ -231,8 +288,10 @@ void HostApp::regenerate_pairing_code()
     pairing_code_ = crypto::generate_pairing_code();
     cfg_->set("host", "pairing_code", pairing_code_);
     cfg_->save();
-    // Restart the endpoint with the new key; existing clients must re-pair.
-    HK_LOGI("New pairing code generated; restart the host to apply");
+    // Takes effect immediately; the connected client keeps its session, new
+    // connections need the new code.
+    net_.set_psk(crypto::psk_from_code(pairing_code_));
+    HK_LOGI("New pairing code generated");
 }
 
 void HostApp::redetect_devices()
@@ -847,10 +906,25 @@ HostSnapshot HostApp::snapshot()
     s.host_name = host_name_;
     s.pairing_code = pairing_code_;
     s.addresses = local_addresses();
-    std::string tailscale_ip;
-    for (const auto& a : s.addresses) if (a.tailscale) { tailscale_ip = a.ip; break; }
-    net_.set_tailscale_address(tailscale_ip);
+    for (const auto& a : s.addresses)
+        if (a.tailscale) {
+            s.tailscale_ip = a.ip;
+            break;
+        }
+    net_.set_tailscale_address(s.tailscale_ip);
     s.port = port_;
+    {
+        std::lock_guard<std::mutex> lk(sysinfo_mu_);
+        s.tailscale_name = tailscale_name_;
+        s.firewall = firewall_;
+        s.lid_action = lid_action_;
+    }
+    s.autostart = autostart_enabled();
+    // Prefer the MagicDNS name (stable across address changes), keep the IP
+    // as a fallback; without Tailscale, the first LAN address.
+    std::string primary = !s.tailscale_name.empty() ? s.tailscale_name : s.tailscale_ip;
+    if (primary.empty() && !s.addresses.empty()) primary = s.addresses.front().ip;
+    if (!primary.empty()) s.invite = make_invite(primary, port_, s.tailscale_ip, pairing_code_);
     s.bridge = bridge_.status();
     s.bridge_ok = s.bridge.connected;
     s.bridge_port = s.bridge.port;

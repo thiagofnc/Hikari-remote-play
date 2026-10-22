@@ -24,6 +24,7 @@
 #include "hikari/config.h"
 #include "hikari/sync.h"
 #include "host_net.h"
+#include "host_system.h"
 
 namespace hikari {
 
@@ -39,6 +40,14 @@ struct HostSnapshot {
     std::string pairing_code;
     std::vector<HostAddress> addresses;
     uint16_t port = proto::kDefaultPort;
+    std::string tailscale_ip;
+    std::string tailscale_name;  // MagicDNS name, when Tailscale reports one
+    std::string invite;          // hikari://... string for the client's paste box
+
+    // Is this PC dependably reachable?
+    FirewallStatus firewall;
+    int lid_action = -1;         // see lid_close_action()
+    bool autostart = false;
 
     bool bridge_ok = false;
     std::string bridge_port;
@@ -92,6 +101,11 @@ public:
     void redetect_devices();
     void wake_console();  // manual wake from the host UI
 
+    // "Always reachable" fixes offered by the host window.
+    bool allow_through_firewall();  // one UAC prompt
+    bool keep_awake_with_lid_closed();
+    bool set_start_with_windows(bool on);
+
 private:
     struct EncodeJob {
         ComPtr<ID3D11Texture2D> texture;
@@ -118,7 +132,13 @@ private:
     Config* cfg_ = nullptr;
     std::unique_ptr<MediaRuntime> media_owned_;
     std::atomic<bool> running_{false};
-    std::thread setup_thread_, encoder_thread_, orchestrator_thread_;
+    std::thread setup_thread_, encoder_thread_, orchestrator_thread_, sysinfo_thread_;
+    void sysinfo_thread();
+    Event sysinfo_wake_;
+    std::mutex sysinfo_mu_;
+    std::string tailscale_name_;
+    FirewallStatus firewall_;
+    int lid_action_ = -1;
     Event wake_;      // orchestrator
     Event enc_wake_;  // encoder thread
     std::atomic<bool> input_enabled_{false};

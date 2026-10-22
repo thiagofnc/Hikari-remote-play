@@ -69,10 +69,10 @@ void D2DWindow::make_font()
     for (HWND e : edits_) SendMessageW(e, WM_SETFONT, reinterpret_cast<WPARAM>(font_), TRUE);
 }
 
-void D2DWindow::run_modal()
+void D2DWindow::run_modal(bool show)
 {
     if (owner_) EnableWindow(owner_, FALSE);
-    ShowWindow(hwnd_, SW_SHOW);
+    if (show) ShowWindow(hwnd_, SW_SHOW);
     MSG m;
     while (IsWindow(hwnd_) && GetMessageW(&m, nullptr, 0, 0) > 0) {
         if (!IsDialogMessageW(hwnd_, &m)) {

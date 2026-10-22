@@ -56,12 +56,14 @@ private:
         kActFullscreen,
         kActConnection,
         kActChangeRole,
+        kActTakeOver,
     };
 
     void load_settings();
     void connect();
     void preview_state(const std::string& state);
     void render_thread();
+    void path_thread();  // Tailscale direct-vs-relayed watcher
     void draw_lobby(ui::Painter& p, const ui::Rect& r);
     void draw_stream_overlay(ui::Painter& p, const ui::Rect& r);
     void draw_stats(ui::Painter& p, const ui::Rect& r);
@@ -87,6 +89,12 @@ private:
     InputMapping mapping_;
 
     std::thread render_;
+    std::thread path_;
+    Event path_wake_;
+    // Route to the host over Tailscale: 0 unknown/not Tailscale, 1 direct, 2 relayed.
+    std::atomic<int> path_state_{0};
+    std::string path_relay_;  // guarded by mu_
+    bool relay_toast_shown_ = false;
     std::atomic<bool> running_{false};
     std::atomic<bool> resize_pending_{false};
     std::atomic<Screen> screen_{Screen::Lobby};

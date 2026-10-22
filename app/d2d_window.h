@@ -20,7 +20,7 @@ public:
     HWND hwnd() const { return hwnd_; }
     void close() { DestroyWindow(hwnd_); }
     // Runs a modal loop (owner disabled) until the window is destroyed.
-    void run_modal();
+    void run_modal(bool show = true);  // show = false: start hidden (tray)
     void invalidate() { InvalidateRect(hwnd_, nullptr, FALSE); }
     float scale() const { return scale_; }
 
