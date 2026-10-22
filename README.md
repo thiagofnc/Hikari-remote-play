@@ -1,12 +1,13 @@
-<p align="center">
-  <img src="assets/hikari_logo_mark.png" alt="Hikari logo" width="140">
-</p>
-
-<h1 align="center">Hikari <sub></sub></h1>
+<table>
+  <tr>
+    <td><img src="assets/hikari_logo_mark.png" alt="Hikari logo" width="96"></td>
+    <td><h1>Hikari Remote Play</h1></td>
+  </tr>
+</table>
 
 <p align="center">
   <b>Your Switch 2, anywhere.</b><br>
-  Low-latency remote play from any Windows PC, powered by a $10 controller bridge and the capture card you already know.
+  Turn a Windows PC into your remote-play host with a $10 controller bridge. Play from anywhere with low latency.
 </p>
 
 <p align="center">
