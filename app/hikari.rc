@@ -3,3 +3,8 @@
 101 RCDATA "../assets/hikari_logo_256.png"
 102 RCDATA "../assets/joycon-reference.png"
 1 RT_MANIFEST "hikari.manifest"
+103 RCDATA "../assets/joycon2-left.png"
+104 RCDATA "../assets/joycon2-right.png"
+105 RCDATA "../assets/joycon2-left-top.png"
+106 RCDATA "../assets/joycon2-right-top.png"
+107 RCDATA "../assets/joycon2-shoulder-base.png"

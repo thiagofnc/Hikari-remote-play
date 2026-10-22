@@ -300,10 +300,11 @@ int run_preview(const std::string& screen)
         window.run_modal();
         return 0;
     }
-    if (screen == "controller" || screen == "controller-compact") {
+    if (screen == "controller" || screen == "controller-compact" || screen == "controller-switch2" || screen == "controller-switch2-compact") {
         InputMapping mapping = InputMapping::defaults_positional();
         ControllerSettingsDeps deps;
-        if (screen == "controller-compact") {
+        if (screen == "controller-switch2" || screen == "controller-switch2-compact") deps.model = joycon::Model::Switch2;
+        if (screen == "controller-compact" || screen == "controller-switch2-compact") {
             deps.initial_width = 1040;
             deps.initial_height = 700;
         }

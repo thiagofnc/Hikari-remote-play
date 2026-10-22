@@ -1,6 +1,6 @@
 enable_language(RC)
 add_executable(Hikari WIN32 main.cpp d2d_window.cpp hikari.rc)
-set_source_files_properties(hikari.rc PROPERTIES OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/../assets/joycon-reference.png;${CMAKE_CURRENT_SOURCE_DIR}/../assets/hikari_logo_256.png;${CMAKE_CURRENT_SOURCE_DIR}/../assets/hikari.ico;${CMAKE_CURRENT_SOURCE_DIR}/hikari.manifest")
+set_source_files_properties(hikari.rc PROPERTIES OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/../assets/joycon-reference.png;${CMAKE_CURRENT_SOURCE_DIR}/../assets/joycon2-left.png;${CMAKE_CURRENT_SOURCE_DIR}/../assets/joycon2-right.png;${CMAKE_CURRENT_SOURCE_DIR}/../assets/joycon2-left-top.png;${CMAKE_CURRENT_SOURCE_DIR}/../assets/joycon2-right-top.png;${CMAKE_CURRENT_SOURCE_DIR}/../assets/joycon2-shoulder-base.png;${CMAKE_CURRENT_SOURCE_DIR}/../assets/hikari_logo_256.png;${CMAKE_CURRENT_SOURCE_DIR}/../assets/hikari.ico;${CMAKE_CURRENT_SOURCE_DIR}/hikari.manifest")
 target_link_libraries(Hikari PRIVATE hikari_client hikari_host shell32)
 if(MINGW)
     target_link_options(Hikari PRIVATE -municode)

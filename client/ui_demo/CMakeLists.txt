@@ -4,6 +4,6 @@
 if(TARGET hikari_client_ui)
     enable_language(RC)
     add_executable(hikari_controller_demo main.cpp ../../assets/joycon.rc)
-    set_source_files_properties(../../assets/joycon.rc PROPERTIES OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/../../assets/joycon-reference.png")
+    set_source_files_properties(../../assets/joycon.rc PROPERTIES OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/../../assets/joycon-reference.png;${CMAKE_CURRENT_SOURCE_DIR}/../../assets/joycon2-left.png;${CMAKE_CURRENT_SOURCE_DIR}/../../assets/joycon2-right.png;${CMAKE_CURRENT_SOURCE_DIR}/../../assets/joycon2-left-top.png;${CMAKE_CURRENT_SOURCE_DIR}/../../assets/joycon2-right-top.png;${CMAKE_CURRENT_SOURCE_DIR}/../../assets/joycon2-shoulder-base.png")
     target_link_libraries(hikari_controller_demo PRIVATE hikari_client_ui)
 endif()

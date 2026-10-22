@@ -1,1 +1,6 @@
 102 RCDATA "joycon-reference.png"
+103 RCDATA "joycon2-left.png"
+104 RCDATA "joycon2-right.png"
+105 RCDATA "joycon2-left-top.png"
+106 RCDATA "joycon2-right-top.png"
+107 RCDATA "joycon2-shoulder-base.png"

@@ -8,6 +8,7 @@
 #include "input_mapping.h"
 
 namespace hikari::joycon {
+enum class Model { Switch, Switch2 };
 struct ArtState {
     uint32_t active = 0;
     float lx = 0, ly = 0, rx = 0, ry = 0;
@@ -19,14 +20,15 @@ struct ArtState {
 };
 class JoyConArt {
 public:
-    bool create(ID2D1Factory* factory);
+    bool create(ID2D1Factory* factory, Model model = Model::Switch);
     bool create_device(ID2D1RenderTarget* rt);
     void release_device();
     void draw(ID2D1RenderTarget* rt, const D2D1_RECT_F& area, const ArtState& state, IDWriteTextFormat* label);
     int hit_test(float x, float y) const;
 private:
-    Microsoft::WRL::ComPtr<IWICFormatConverter> source_;
-    Microsoft::WRL::ComPtr<ID2D1Bitmap> bitmap_;
+    Model model_ = Model::Switch;
+    Microsoft::WRL::ComPtr<IWICFormatConverter> source_[4];
+    Microsoft::WRL::ComPtr<ID2D1Bitmap> bitmap_[4];
     Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush_;
     Microsoft::WRL::ComPtr<ID2D1PathGeometry> shoulder_[2], trigger_[2];
     float scale_ = 1, ox_ = 0, oy_ = 0;

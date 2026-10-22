@@ -418,7 +418,7 @@ bool SettingsWindow::create_factories()
     if (!f_title_ || !f_dlg_title_ || !f_sub_ || !f_caption_ || !f_body_ || !f_body_sb_ || !f_small_ || !f_key_ ||
         !f_art_ || !f_wrap_)
         return false;
-    return art_.create(d2d_.Get());
+    return art_.create(d2d_.Get(), deps_.model);
 }
 
 bool SettingsWindow::create_device()
@@ -1414,7 +1414,7 @@ void SettingsWindow::draw_art_card()
     fill_rr(card, 12, col(kPanel));
 
     const D2D1_RECT_F a = lay_.pill_anchor;
-    text(L"Controller", {a.left + 2, a.top, a.right, a.bottom}, f_caption_.Get(), col(kText2));
+    text(deps_.model == joycon::Model::Switch2 ? L"Switch 2" : L"Controller", {a.left + 2, a.top, a.right, a.bottom}, f_caption_.Get(), col(kText2));
 
     // Status pill, right-aligned.
     std::wstring status;

@@ -327,6 +327,7 @@ void ClientApp::do_action(int action)
 void ClientApp::open_controller_settings()
 {
     ControllerSettingsDeps deps;
+    if (hooks_.preview == "switch2") deps.model = joycon::Model::Switch2;
     deps.poll_pad = [this] { return input_.raw(); };
     deps.list_devices = [this] { return input_.devices(); };
     deps.select_device = [this](const std::string& name) {
