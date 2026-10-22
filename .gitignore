@@ -1,0 +1,18 @@
+# Build output
+/build*/
+/out/
+CMakeUserPresets.json
+.vs/
+.vscode/
+*.user
+
+# ESP-IDF
+firmware/esp32-s3/build/
+firmware/esp32-s3/managed_components/
+firmware/esp32-s3/sdkconfig
+firmware/esp32-s3/sdkconfig.old
+firmware/esp32-s3/dependencies.lock
+
+# Benchmark / telemetry results
+*.csv
+results/
