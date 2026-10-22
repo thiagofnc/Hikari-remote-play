@@ -20,14 +20,14 @@ using Microsoft::WRL::ComPtr;
 D2D1_COLOR_F rgb(uint32_t hex, float a = 1.0f);
 
 namespace theme {
-constexpr uint32_t kBg = 0x111216;
-constexpr uint32_t kBg2 = 0x1A1C22;
-constexpr uint32_t kSurface = 0x1F2229;
-constexpr uint32_t kSurface2 = 0x2A2E37;
-constexpr uint32_t kBorder = 0x353A44;
-constexpr uint32_t kText = 0xECEDEF;
-constexpr uint32_t kText2 = 0x9CA3AF;
-constexpr uint32_t kText3 = 0x6B7280;
+constexpr uint32_t kBg = 0x191A1D;
+constexpr uint32_t kBg2 = 0x202226;
+constexpr uint32_t kSurface = 0x282A2F;
+constexpr uint32_t kSurface2 = 0x303339;
+constexpr uint32_t kBorder = 0x41444B;
+constexpr uint32_t kText = 0xF1F2F3;
+constexpr uint32_t kText2 = 0xB7BAC0;
+constexpr uint32_t kText3 = 0xA0A4AC;
 constexpr uint32_t kAccent = 0xFBBB04;   // Hikari amber (logo colour)
 constexpr uint32_t kAccentHover = 0xFFCB33;
 constexpr uint32_t kOnAccent = 0x1A1400;

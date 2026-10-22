@@ -37,7 +37,7 @@ bool D2DWindow::create(const wchar_t* title, int w_dip, int h_dip, HWND owner, b
     start_ = now_us();
     painter_.init();
     D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, factory_.GetAddressOf());
-    edit_brush_ = CreateSolidBrush(RGB(0x2A, 0x2E, 0x37));
+    edit_brush_ = CreateSolidBrush(RGB(0x28, 0x2A, 0x2F));
 
     const UINT dpi = owner ? GetDpiForWindow(owner) : GetDpiForSystem();
     scale_ = dpi / 96.0f;
@@ -226,7 +226,7 @@ LRESULT D2DWindow::handle(UINT msg, WPARAM wp, LPARAM lp)
     case WM_CTLCOLOREDIT: {
         HDC dc = reinterpret_cast<HDC>(wp);
         SetTextColor(dc, RGB(0xEC, 0xED, 0xEF));
-        SetBkColor(dc, RGB(0x2A, 0x2E, 0x37));
+        SetBkColor(dc, RGB(0x28, 0x2A, 0x2F));
         return reinterpret_cast<LRESULT>(edit_brush_);
     }
     case WM_CLOSE:

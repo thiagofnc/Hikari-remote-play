@@ -428,7 +428,8 @@ bool SettingsWindow::create_device()
     GetClientRect(hwnd_, &rc);
     const auto fdpi = static_cast<float>(dpi_);
     const D2D1_RENDER_TARGET_PROPERTIES props = D2D1::RenderTargetProperties(
-        D2D1_RENDER_TARGET_TYPE_DEFAULT, D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED),
+        D2D1_RENDER_TARGET_TYPE_DEFAULT,
+        D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_IGNORE),
         fdpi, fdpi);
     const D2D1_HWND_RENDER_TARGET_PROPERTIES hprops = D2D1::HwndRenderTargetProperties(
         hwnd_, D2D1::SizeU(static_cast<UINT32>(std::max<LONG>(1, rc.right - rc.left)),
@@ -772,7 +773,7 @@ void SettingsWindow::compute_layout()
             }
         const float avail = grid_bottom - grid_top - static_cast<float>(groups) * hdr_h -
                             static_cast<float>(std::max(0, groups - 1)) * group_gap;
-        const float pitch = std::clamp(avail / static_cast<float>(std::max(1, rows)), 30.0f, 40.0f);
+        const float pitch = std::clamp(avail / static_cast<float>(std::max(1, rows)), 24.0f, 40.0f);
         const float row_h = std::min(32.0f, pitch - 5.0f);
         const float cx = in.left + (col_w + gap) * static_cast<float>(c);
         const float label_w = std::clamp(col_w * 0.30f, 52.0f, 76.0f);
@@ -1761,8 +1762,10 @@ bool SettingsWindow::run(HWND parent)
     apply_dark_title_bar(hwnd_);
 
     dpi_ = GetDpiForWindow(hwnd_);
-    RECT r = {0, 0, MulDiv(static_cast<int>(kDesignW), static_cast<int>(dpi_), 96),
-              MulDiv(static_cast<int>(kDesignH), static_cast<int>(dpi_), 96)};
+    const int initial_w = deps_.initial_width ? std::max(static_cast<int>(kMinW), deps_.initial_width) : static_cast<int>(kDesignW);
+    const int initial_h = deps_.initial_height ? std::max(static_cast<int>(kMinH), deps_.initial_height) : static_cast<int>(kDesignH);
+    RECT r = {0, 0, MulDiv(initial_w, static_cast<int>(dpi_), 96),
+              MulDiv(initial_h, static_cast<int>(dpi_), 96)};
     AdjustWindowRectExForDpi(&r, WS_OVERLAPPEDWINDOW, FALSE, 0, dpi_);
     const int ww = std::min<int>(r.right - r.left, mi.rcWork.right - mi.rcWork.left);
     const int wh = std::min<int>(r.bottom - r.top, mi.rcWork.bottom - mi.rcWork.top);

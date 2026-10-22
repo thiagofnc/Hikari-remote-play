@@ -139,23 +139,7 @@ void Painter::clear(uint32_t color) { rt_->Clear(rgb(color)); }
 
 void Painter::background(const Rect& r)
 {
-    ComPtr<ID2D1GradientStopCollection> stops;
-    const D2D1_GRADIENT_STOP s[] = {{0.0f, rgb(theme::kBg2)}, {1.0f, rgb(theme::kBg)}};
-    rt_->CreateGradientStopCollection(s, 2, &stops);
-    ComPtr<ID2D1LinearGradientBrush> g;
-    rt_->CreateLinearGradientBrush(D2D1::LinearGradientBrushProperties(D2D1::Point2F(0, r.t), D2D1::Point2F(0, r.b)),
-                                   stops.Get(), &g);
-    rt_->FillRectangle(r.d2d(), g.Get());
-    // Warm glow behind the hero area, a nod to the logo.
-    ComPtr<ID2D1GradientStopCollection> gs;
-    const D2D1_GRADIENT_STOP gstops[] = {{0.0f, rgb(theme::kAccent, 0.10f)}, {1.0f, rgb(theme::kAccent, 0.0f)}};
-    rt_->CreateGradientStopCollection(gstops, 2, &gs);
-    ComPtr<ID2D1RadialGradientBrush> rg;
-    const float rad = std::max(r.w(), r.h()) * 0.45f;
-    rt_->CreateRadialGradientBrush(
-        D2D1::RadialGradientBrushProperties(D2D1::Point2F(r.cx(), r.t + r.h() * 0.42f), D2D1::Point2F(0, 0), rad, rad * 0.7f),
-        gs.Get(), &rg);
-    rt_->FillRectangle(r.d2d(), rg.Get());
+    fill(r, rgb(theme::kBg));
 }
 
 void Painter::fill(const Rect& r, D2D1_COLOR_F c, float radius)
@@ -214,7 +198,7 @@ bool Painter::button(Interaction& ui, int id, const Rect& r, const std::string& 
     const bool hover = enabled && ui.hovered(id, r);
     const bool down = hover && ui.mouse_down && ui.pressed_id == id;
     const bool focus = ui.focus_id == id;
-    const float rad = s(10);
+    const float rad = s(6);
     D2D1_COLOR_F bg, fg, border{0, 0, 0, 0};
     switch (style) {
     case ButtonStyle::Primary:
@@ -240,15 +224,10 @@ bool Painter::button(Interaction& ui, int id, const Rect& r, const std::string& 
         fg.a *= 0.4f;
     }
     Rect rr = down ? r.inset(s(1)) : r;
-    if (style == ButtonStyle::Primary && enabled) {
-        // Soft amber halo that breathes slowly: the one thing that should draw the eye.
-        const float pulse = 0.5f + 0.5f * static_cast<float>(std::sin(time_ * 2.2));
-        fill(rr.inset(-s(4) - s(2) * pulse), rgb(theme::kAccent, 0.10f + 0.06f * pulse), rad + s(5));
-    }
     fill(rr, bg, rad);
     if (border.a > 0) stroke(rr, border, s(1), rad);
     if (focus) stroke(rr.inset(-s(3)), rgb(theme::kAccent, 0.9f), s(2), rad + s(3));
-    text(label, rr, rr.h() > s(46) ? s(17) : s(14), fg, style == ButtonStyle::Primary ? Weight::Bold : Weight::SemiBold,
+    text(label, rr, s(14), fg, Weight::SemiBold,
          Align::Center, Align::Center);
     return enabled && ui.clicked_id == id;
 }
@@ -260,9 +239,8 @@ float Painter::pill(float x, float y, const std::string& label, uint32_t dot, bo
     const float h = s(26);
     const float l = right_align ? x - w : x;
     Rect r{l, y, l + w, y + h};
-    fill(r, rgb(theme::kSurface2, 0.9f), h / 2);
+    fill(r, rgb(theme::kBg2), s(5));
     circle(r.l + s(13), r.cy(), s(4), rgb(dot));
-    circle(r.l + s(13), r.cy(), s(7), rgb(dot, 0.18f));
     text(label, Rect{r.l + s(22), r.t, r.r - s(8), r.b}, size, rgb(theme::kText), Weight::Medium);
     return w;
 }
@@ -315,12 +293,6 @@ void Painter::console(const Rect& r, uint32_t status, bool screen_on)
     const float unit = w / 100.0f;
     const float top = r.t + unit * 6;
 
-    // TV glow when the console is awake.
-    if (screen_on) {
-        const float pulse = 0.85f + 0.15f * static_cast<float>(std::sin(time_ * 1.6));
-        fill(Rect{r.l - unit * 4, top - unit * 4, r.r + unit * 4, top + unit * 46}, rgb(theme::kAccent, 0.07f * pulse),
-             unit * 10);
-    }
 
     // Joy-Con 2 (left/right) and console body.
     const Rect body{r.l + unit * 12, top, r.r - unit * 12, top + unit * 42};

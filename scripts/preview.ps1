@@ -4,7 +4,7 @@
 #>
 [CmdletBinding()]
 param(
-    [ValidateSet('setup', 'connection', 'host', 'controller', 'ready', 'asleep', 'waking', 'failed', 'stream')]
+    [ValidateSet('setup', 'connection', 'host', 'controller', 'controller-compact', 'ready', 'asleep', 'waking', 'failed', 'stream')]
     [string]$Screen = 'ready',
     [string]$BuildDir = "$env:LOCALAPPDATA\Hikari-build\clang-Release"
 )

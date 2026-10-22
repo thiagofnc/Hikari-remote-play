@@ -21,3 +21,5 @@ results/
 /dist/
 /.deps/
 /artifacts/ui-review/
+/.impeccable/review/
+/.impeccable/cache/

@@ -16,5 +16,6 @@ add_test(NAME hikari_app_startup COMMAND Hikari --selftest)
 set_tests_properties(hikari_app_startup PROPERTIES TIMEOUT 15)
 
 add_executable(hikari_diagram_tests test_diagram.cpp ../assets/joycon.rc)
+set_source_files_properties(../assets/joycon.rc PROPERTIES OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/../assets/joycon-reference.png")
 target_link_libraries(hikari_diagram_tests PRIVATE hikari_client_ui)
 add_test(NAME hikari_controller_diagram COMMAND hikari_diagram_tests)

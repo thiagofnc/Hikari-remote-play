@@ -26,16 +26,21 @@ private:
     void draw(ui::Painter& p, const Rect& r) override
     {
         p.background(r);
-        p.logo({r.cx() - p.s(42), p.s(24), r.cx() + p.s(42), p.s(108)});
-        p.text("Your Switch, anywhere.", {0, p.s(120), r.r, p.s(164)}, p.s(26), ui::rgb(th::kText),
-               ui::Weight::SemiBold, ui::Align::Center);
-        p.text("What will this PC do?", {0, p.s(174), r.r, p.s(205)}, p.s(16), ui::rgb(th::kText2),
-               ui::Weight::Regular, ui::Align::Center);
-        p.button(ui_, 1, {p.s(32), p.s(232), r.r - p.s(32), p.s(284)}, "Host - the PC beside your Switch", ui::ButtonStyle::Primary);
-        p.button(ui_, 2, {p.s(32), p.s(300), r.r - p.s(32), p.s(352)}, "Client - the PC where you play");
-        p.text("You can change roles by launching Hikari with --setup.",
-               {p.s(24), p.s(374), r.r - p.s(24), p.s(410)}, p.s(12), ui::rgb(th::kText2),
-               ui::Weight::Regular, ui::Align::Center, ui::Align::Center, true);
+        const float x=p.s(32), right=r.r-x;
+        p.logo({x,p.s(24),x+p.s(26),p.s(50)});
+        p.text("Hikari",{x+p.s(36),p.s(24),right,p.s(50)},p.s(18),ui::rgb(th::kText),ui::Weight::SemiBold);
+        p.text("Set up this PC",{x,p.s(88),right,p.s(128)},p.s(28),ui::rgb(th::kText),ui::Weight::SemiBold);
+        p.text("Choose how this PC will connect to your Switch.",{x,p.s(136),right,p.s(166)},p.s(14),ui::rgb(th::kText2));
+        const auto choice=[&](int id,float y,const char* name,const char* description) {
+            const Rect box{x,p.s(y),right,p.s(y+80)};
+            p.button(ui_,id,box,"",ui::ButtonStyle::Secondary);
+            p.text(name,{x+p.s(18),p.s(y+12),right-p.s(18),p.s(y+38)},p.s(17),ui::rgb(th::kText),ui::Weight::SemiBold);
+            p.text(description,{x+p.s(18),p.s(y+40),right-p.s(18),p.s(y+68)},p.s(13),ui::rgb(th::kText2));
+        };
+        choice(1,190,"Host","Beside your Switch, with the capture card connected.");
+        choice(2,282,"Client","The PC where you will play.");
+        p.text("Your choice is saved on this PC.",{x,p.s(386),right,p.s(412)},p.s(12),ui::rgb(th::kText3));
+
     }
     void on_action(int id) override { role = id == 1 ? "host" : "client"; close(); }
 };
@@ -62,21 +67,23 @@ private:
     {
         p.background(r);
         const float x = p.s(30), right = r.r - x;
-        p.text("Connect to your Switch", {x, p.s(22), right, p.s(66)}, p.s(26), ui::rgb(th::kText), ui::Weight::SemiBold);
+        p.text("Connect to your Switch", {x, p.s(22), right, p.s(66)}, p.s(24), ui::rgb(th::kText), ui::Weight::SemiBold);
         p.text("Use the address and pairing code shown on your host PC.",
                {x, p.s(72), right, p.s(108)}, p.s(14), ui::rgb(th::kText2));
         p.text("Host address (LAN IP or Tailscale name)", {x, p.s(122), right, p.s(148)}, p.s(14), ui::rgb(th::kText));
         const Rect host_rect{x, p.s(152), right, p.s(196)};
-        p.fill(host_rect, ui::rgb(th::kSurface2), p.s(6));
+        p.fill(host_rect, ui::rgb(th::kSurface), p.s(6));
+        p.stroke(host_rect, ui::rgb(GetFocus()==host_?th::kAccent:th::kBorder), p.s(1), p.s(6));
         place(host_, host_rect);
         p.text("Pairing code", {x, p.s(210), right, p.s(236)}, p.s(14), ui::rgb(th::kText));
         const Rect code_rect{x, p.s(240), right, p.s(284)};
-        p.fill(code_rect, ui::rgb(th::kSurface2), p.s(6));
+        p.fill(code_rect, ui::rgb(th::kSurface), p.s(6));
+        p.stroke(code_rect, ui::rgb(GetFocus()==code_?th::kAccent:th::kBorder), p.s(1), p.s(6));
         place(code_, code_rect);
-        p.text("Hosts on your network", {x, p.s(304), right, p.s(330)}, p.s(14), ui::rgb(th::kText2));
+        p.text("Nearby hosts", {x, p.s(304), right, p.s(330)}, p.s(14), ui::rgb(th::kText2));
         hosts_ = discovery_.discovered();
         if (hosts_.empty())
-            p.text(offline_ ? "Offline preview - discovery is disabled." : "Searching... You can also enter an address above.", {x, p.s(338), right, p.s(374)}, p.s(13), ui::rgb(th::kText2));
+            p.text(offline_ ? "Offline preview - discovery is disabled." : "No host found yet. You can enter an address above.", {x, p.s(338), right, p.s(374)}, p.s(13), ui::rgb(th::kText2));
         for (size_t i = 0; i < std::min<size_t>(hosts_.size(), 2); ++i) {
             const float y = p.s(338 + 42 * float(i));
             p.button(ui_, 100 + int(i), {x, y, right, y + p.s(36)}, hosts_[i].name + "  " + hosts_[i].address);
@@ -157,7 +164,7 @@ private:
             s.message = "Sample device status. No hardware or network connection is active.";
         } else s = host_.snapshot();
         const float x = p.s(30), right = r.r - x;
-        p.text("Hikari Host", {x, p.s(22), right, p.s(62)}, p.s(28), ui::rgb(th::kText), ui::Weight::SemiBold);
+        p.text("Hikari Host", {x, p.s(22), right, p.s(62)}, p.s(24), ui::rgb(th::kText), ui::Weight::SemiBold);
         p.text(s.host_name, {x, p.s(66), right, p.s(94)}, p.s(15), ui::rgb(th::kText2));
         p.text("Pairing code:  " + s.pairing_code, {x, p.s(112), right, p.s(152)}, p.s(23), ui::rgb(th::kAccent), ui::Weight::SemiBold);
         float y = p.s(164);
@@ -179,6 +186,7 @@ private:
             p.circle(x + p.s(6), y + p.s(14), p.s(4), ui::rgb(check.ok ? th::kGood : th::kWarn));
             p.text(check.label, {x + p.s(20), y, right, y + p.s(27)}, p.s(15), ui::rgb(th::kText), ui::Weight::SemiBold);
             p.text(check.detail, {x + p.s(20), y + p.s(27), right, y + p.s(51)}, p.s(13), ui::rgb(th::kText2));
+            p.line(x, y + p.s(56), right, y + p.s(56), ui::rgb(th::kBorder), p.s(1));
             y += p.s(62);
         }
         p.text(s.client_connected ? "Connected: " + s.client_name : "Waiting for a client", {x, p.s(504), right, p.s(532)}, p.s(15), ui::rgb(s.client_connected ? th::kGood : th::kText2));
@@ -263,9 +271,13 @@ int run_preview(const std::string& screen)
         window.run_modal();
         return 0;
     }
-    if (screen == "controller") {
+    if (screen == "controller" || screen == "controller-compact") {
         InputMapping mapping = InputMapping::defaults_positional();
         ControllerSettingsDeps deps;
+        if (screen == "controller-compact") {
+            deps.initial_width = 1040;
+            deps.initial_height = 700;
+        }
         deps.poll_pad = [] {
             RawPadState pad;
             pad.connected = true;

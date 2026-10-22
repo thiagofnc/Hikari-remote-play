@@ -82,7 +82,7 @@ Release builds link the C/C++ runtime statically (`/MT` on MSVC, `-static` on Mi
 
 Run them with `ctest` (above) or directly with `build\bin\hikari_tests.exe`.
 
-CTest also runs the controller mapping self-test, a hidden desktop startup/rendering/resource smoke test, and `hikari_session_tests`. The session test uses a random loopback UDP port to exercise wrong-code rejection, authenticated input, video delivery, clock sync and reconnection without console hardware. Run `hikari-netsim --selftest` separately for timed network impairment checks.
+CTest also runs the controller mapping self-test, a hidden desktop startup/rendering/resource smoke test, the controller artwork rendering and 26-control hit tests at three scales, and `hikari_session_tests`. The session test uses a random loopback UDP port to exercise wrong-code rejection, authenticated input, video delivery, clock sync and reconnection without console hardware. Run `hikari-netsim --selftest` separately for timed network impairment checks.
 
 These tests do not validate physical capture, hardware decoding, bridge timing or remote wake. Measure those with the actual hardware using [profiling.md](profiling.md).
 
@@ -105,7 +105,7 @@ Open screens without another computer, capture card or controller bridge:
 .\scripts\preview.ps1 -Screen controller
 ```
 
-Screens: `setup`, `connection`, `host`, `controller`, `ready`, `asleep`, `waking`, `failed`, `stream`. Use `-BuildDir` for a different build directory, or run `Hikari.exe --preview=ready` directly. Preview mode uses the real UI with sample state, starts no streaming/network/device services, and keeps any saved preview settings separate in `%LOCALAPPDATA%\Hikari\preview`. In the lobby, Play opens the stream-overlay preview; Ctrl+Alt+Q returns to the lobby. The stream preview has no game video or measured telemetry.
+Screens: `setup`, `connection`, `host`, `controller`, `controller-compact`, `ready`, `asleep`, `waking`, `failed`, `stream`. Use `-BuildDir` for a different build directory, or run `Hikari.exe --preview=ready` directly. Preview mode uses the real UI with sample state, starts no streaming/network/device services, and keeps any saved preview settings separate in `%LOCALAPPDATA%\Hikari\preview`. In the lobby, Play opens the stream-overlay preview; Ctrl+Alt+Q returns to the lobby. The stream preview has no game video or measured telemetry.
 
 ### Fuzzing the link parser
 

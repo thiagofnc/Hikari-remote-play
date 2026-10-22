@@ -1,4 +1,6 @@
 #include "joycon_art.h"
+#include "hikari/log.h"
+#include "hikari/system.h"
 #include <algorithm>
 #include <cmath>
 #include <cwchar>
@@ -75,8 +77,13 @@ bool JoyConArt::create(ID2D1Factory* factory)
 bool JoyConArt::create_device(ID2D1RenderTarget* rt)
 {
     release_device();
-    return source_ && SUCCEEDED(rt->CreateBitmapFromWicBitmap(source_.Get(),nullptr,&bitmap_)) &&
-        SUCCEEDED(rt->CreateSolidColorBrush(color(kAmber),&brush_));
+    if (!source_) return false;
+    const HRESULT hr = rt->CreateBitmapFromWicBitmap(source_.Get(), nullptr, &bitmap_);
+    if (FAILED(hr)) {
+        HK_LOGE("Controller artwork bitmap: %s", hresult_string(hr).c_str());
+        return false;
+    }
+    return SUCCEEDED(rt->CreateSolidColorBrush(color(kAmber), &brush_));
 }
 void JoyConArt::release_device() { bitmap_.Reset(); brush_.Reset(); }
 
