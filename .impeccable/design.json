@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-22T03:33:51.151141+00:00",
+  "generatedAt": "2026-10-22T03:42:27.390142+00:00",
   "title": "Design System: Hikari",
   "extensions": {
     "colorMeta": {
@@ -312,12 +312,13 @@
           14.5
         ]
       ],
-      "hikariMark": "(37,11)-(63,37), 26-unit square centered in full physical display (15,4)-(85,44), screen-on only; lower portion naturally occluded by dock, not centered in only the exposed area.",
-      "variants": "Switch cyan/coral grips; Switch2 #444A50 graphite grips with the same fill geometry and #353A3F caps as Switch, cyan/coral stick rings and C button. Shared identical taller dock, no extra rounded inner grip outline. Blank screen while off. Flat status LED.",
+      "variants": "Switch cyan/coral grips; Switch2 #444A50 graphite grips with the same fill geometry and #353A3F caps as Switch, cyan/coral stick rings and C button. Shared identical taller dock, no extra rounded inner grip outline. Screen always blank black. Flat status LED.",
       "layout": "Session art width clamp(inner width * 0.44,174,300) DIP; text ends 20 DIP before artwork. Progress collapses to current step below 330 DIP text width.",
       "availability": "Switch2 sample via --preview=switch2. Live fallback Switch; no selector or automatic model identification. Generic bridge reports USB readiness only.",
       "controllerBoundary": "Interactive supplied Joy-Con artwork unchanged.",
-      "evidence": "Current ui/ui_kit.cpp final dock and centered logo coordinates; validated fresh captures artifacts/ui-review/console/switch.png and artifacts/ui-review/console/switch2.png with corresponding panel crops. Earlier compact/failed/waking captures document unchanged session layout only."
+      "evidence": "Current ui/ui_kit.cpp and ui/hikari/ui_kit.h confirm whole-console +8 Y layer, fixed dock and always-black screen. Validated fresh captures artifacts/ui-review/console/switch.png and artifacts/ui-review/console/switch2.png with corresponding panel crops show the final lowered console and blank screens.",
+      "layerOffset": "Entire console layer (tablet, display, Joy-Cons and all controls) translated +8 units in Y. Restore original transform before unchanged fixed dock. Control centers in this metadata are pre-translation local coordinates.",
+      "screen": "Both models always blank #090B0D at local (15,4)-(85,44), including ready sessions. No on-screen Hikari mark; console API no longer has a screen-on parameter."
     }
   },
   "components": [

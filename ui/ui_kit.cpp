@@ -282,7 +282,7 @@ void Painter::logo(const Rect& r, float opacity)
     rt_->DrawBitmap(logo_.Get(), r.d2d(), opacity, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
 }
 
-void Painter::console(const Rect& r, uint32_t status, bool screen_on, ConsoleModel model)
+void Painter::console(const Rect& r, uint32_t status, ConsoleModel model)
 {
     // Front elevation, in a 100 x 64 coordinate space. Dock edges stay
     // inside the controller rails so sticks and buttons remain visible.
@@ -294,6 +294,10 @@ void Painter::console(const Rect& r, uint32_t status, bool screen_on, ConsoleMod
     const auto disk = [&](float x,float y,float radius,uint32_t color) {
         circle(ox+x*u,oy+y*u,radius*u,rgb(color));
     };
+    // Move the complete console as one layer; the dock stays fixed below.
+    D2D1_MATRIX_3X2_F original_transform;
+    rt_->GetTransform(&original_transform);
+    rt_->SetTransform(D2D1::Matrix3x2F::Translation(0,8*u)*original_transform);
     const bool second = model == ConsoleModel::Switch2;
     const uint32_t ink=0x15171B, cap=0x353A3F;
     const uint32_t left=second?0x444A50:0x00B8D2, right=second?0x444A50:0xFF5B54;
@@ -305,9 +309,7 @@ void Painter::console(const Rect& r, uint32_t status, bool screen_on, ConsoleMod
     fill(tablet,rgb(0x101216),u*0.8f);
     stroke(tablet,rgb(0x3A3E44),u*0.45f,u*0.8f);
     const Rect display=box(15,4,85,44);
-    fill(display,rgb(screen_on?0x252930:0x090B0D),u*0.5f);
-    // The taller dock deliberately covers the lower part of the display-centered mark.
-    if(screen_on) logo(box(37,11,63,37));
+    fill(display,rgb(0x090B0D),u*0.5f);
 
     const auto stick=[&](float x,float y,uint32_t ring) {
         disk(x,y,3.55f,ink);
@@ -333,6 +335,7 @@ void Painter::console(const Rect& r, uint32_t status, bool screen_on, ConsoleMod
     disk(90.5f,37.8f,1.55f,ink);
     if(second) fill(box(89.1f,42.0f,91.9f,44.8f),rgb(ink),u*0.5f);
 
+    rt_->SetTransform(original_transform);
     const Rect dock=box(14,23.5f,86,63);
     fill(dock,rgb(0x24272E),u*2);
     stroke(dock,rgb(0x42474F),u*0.4f,u*2);

@@ -106,8 +106,8 @@ public:
     void progress(const Rect& r, float frac, D2D1_COLOR_F c);
     bool toggle(Interaction& ui, int id, const Rect& r, bool on);
     void logo(const Rect& r, float opacity = 1.0f);
-    // Stylised Switch in its dock. `screen` shows the awake display.
-    void console(const Rect& r, uint32_t status_color, bool screen_on, ConsoleModel model = ConsoleModel::Switch);
+    // Stylised Switch in its dock. The display stays off in this illustration.
+    void console(const Rect& r, uint32_t status_color, ConsoleModel model = ConsoleModel::Switch);
 
 private:
     IDWriteTextFormat* format(float size, Weight w, Align h, Align v, bool wrap);

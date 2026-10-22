@@ -710,7 +710,7 @@ void ClientApp::draw_lobby(ui::Painter& p, const Rect& r)
     default: state="Checking your console"; break;
     }
     p.text(state,{x,top+p.s(52),text_right,top+p.s(92)},p.s(13),ui::rgb(th::kText2),Weight::Regular,Align::Leading,Align::Leading,true);
-    p.console({inner-art_width,top+p.s(18),inner,session_bottom-p.s(18)},awake?th::kGood:th::kWarn,awake,
+    p.console({inner-art_width,top+p.s(18),inner,session_bottom-p.s(18)},awake?th::kGood:th::kWarn,
               switch2_preview?ui::ConsoleModel::Switch2:ui::ConsoleModel::Switch);
     const bool progress=have && st.phase!=SessionPhase::Lobby && st.phase!=SessionPhase::Failed;
     float y=top+p.s(100);
