@@ -87,7 +87,7 @@ public:
     double time() const { return time_; }
 
     void clear(uint32_t color);
-    void background(const Rect& r);  // subtle vertical gradient + glow
+    void background(const Rect& r);  // matte application background
     void fill(const Rect& r, D2D1_COLOR_F c, float radius = 0);
     void stroke(const Rect& r, D2D1_COLOR_F c, float width, float radius = 0);
     void line(float x0, float y0, float x1, float y1, D2D1_COLOR_F c, float width);
@@ -105,7 +105,7 @@ public:
     void progress(const Rect& r, float frac, D2D1_COLOR_F c);
     bool toggle(Interaction& ui, int id, const Rect& r, bool on);
     void logo(const Rect& r, float opacity = 1.0f);
-    // Stylised Switch 2 in its dock. `screen` lights the TV glow when awake.
+    // Stylised Switch in its dock. `screen` shows the awake display.
     void console(const Rect& r, uint32_t status_color, bool screen_on);
 
 private:

@@ -1,0 +1,370 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-22T02:29:24.501439+00:00",
+  "title": "Design System: Hikari",
+  "extensions": {
+    "colorMeta": {
+      "graphite-bg": {
+        "role": "neutral",
+        "displayName": "Graphite Bg",
+        "tonalRamp": [
+          "oklch(15% 0.0060 271.13)",
+          "oklch(26% 0.0060 271.13)",
+          "oklch(38% 0.0060 271.13)",
+          "oklch(49% 0.0060 271.13)",
+          "oklch(61% 0.0060 271.13)",
+          "oklch(72% 0.0060 271.13)",
+          "oklch(84% 0.0060 271.13)",
+          "oklch(95% 0.0060 271.13)"
+        ]
+      },
+      "graphite-panel": {
+        "role": "neutral",
+        "displayName": "Graphite Panel",
+        "tonalRamp": [
+          "oklch(15% 0.0081 264.42)",
+          "oklch(26% 0.0081 264.42)",
+          "oklch(38% 0.0081 264.42)",
+          "oklch(49% 0.0081 264.42)",
+          "oklch(61% 0.0081 264.42)",
+          "oklch(72% 0.0081 264.42)",
+          "oklch(84% 0.0081 264.42)",
+          "oklch(95% 0.0081 264.42)"
+        ]
+      },
+      "control": {
+        "role": "neutral",
+        "displayName": "Control",
+        "tonalRamp": [
+          "oklch(15% 0.0096 268.34)",
+          "oklch(26% 0.0096 268.34)",
+          "oklch(38% 0.0096 268.34)",
+          "oklch(49% 0.0096 268.34)",
+          "oklch(61% 0.0096 268.34)",
+          "oklch(72% 0.0096 268.34)",
+          "oklch(84% 0.0096 268.34)",
+          "oklch(95% 0.0096 268.34)"
+        ]
+      },
+      "control-hover": {
+        "role": "neutral",
+        "displayName": "Control Hover",
+        "tonalRamp": [
+          "oklch(15% 0.0115 264.40)",
+          "oklch(26% 0.0115 264.40)",
+          "oklch(38% 0.0115 264.40)",
+          "oklch(49% 0.0115 264.40)",
+          "oklch(61% 0.0115 264.40)",
+          "oklch(72% 0.0115 264.40)",
+          "oklch(84% 0.0115 264.40)",
+          "oklch(95% 0.0115 264.40)"
+        ]
+      },
+      "border": {
+        "role": "neutral",
+        "displayName": "Border",
+        "tonalRamp": [
+          "oklch(15% 0.0125 267.20)",
+          "oklch(26% 0.0125 267.20)",
+          "oklch(38% 0.0125 267.20)",
+          "oklch(49% 0.0125 267.20)",
+          "oklch(61% 0.0125 267.20)",
+          "oklch(72% 0.0125 267.20)",
+          "oklch(84% 0.0125 267.20)",
+          "oklch(95% 0.0125 267.20)"
+        ]
+      },
+      "text": {
+        "role": "neutral",
+        "displayName": "Text",
+        "tonalRamp": [
+          "oklch(15% 0.0017 247.84)",
+          "oklch(26% 0.0017 247.84)",
+          "oklch(38% 0.0017 247.84)",
+          "oklch(49% 0.0017 247.84)",
+          "oklch(61% 0.0017 247.84)",
+          "oklch(72% 0.0017 247.84)",
+          "oklch(84% 0.0017 247.84)",
+          "oklch(95% 0.0017 247.84)"
+        ]
+      },
+      "text-secondary": {
+        "role": "neutral",
+        "displayName": "Text Secondary",
+        "tonalRamp": [
+          "oklch(15% 0.0091 264.51)",
+          "oklch(26% 0.0091 264.51)",
+          "oklch(38% 0.0091 264.51)",
+          "oklch(49% 0.0091 264.51)",
+          "oklch(61% 0.0091 264.51)",
+          "oklch(72% 0.0091 264.51)",
+          "oklch(84% 0.0091 264.51)",
+          "oklch(95% 0.0091 264.51)"
+        ]
+      },
+      "text-muted": {
+        "role": "neutral",
+        "displayName": "Text Muted",
+        "tonalRamp": [
+          "oklch(15% 0.0124 264.49)",
+          "oklch(26% 0.0124 264.49)",
+          "oklch(38% 0.0124 264.49)",
+          "oklch(49% 0.0124 264.49)",
+          "oklch(61% 0.0124 264.49)",
+          "oklch(72% 0.0124 264.49)",
+          "oklch(84% 0.0124 264.49)",
+          "oklch(95% 0.0124 264.49)"
+        ]
+      },
+      "amber": {
+        "role": "primary",
+        "displayName": "Amber",
+        "tonalRamp": [
+          "oklch(15% 0.1697 83.50)",
+          "oklch(26% 0.1697 83.50)",
+          "oklch(38% 0.1697 83.50)",
+          "oklch(49% 0.1697 83.50)",
+          "oklch(61% 0.1697 83.50)",
+          "oklch(72% 0.1697 83.50)",
+          "oklch(84% 0.1697 83.50)",
+          "oklch(95% 0.1697 83.50)"
+        ]
+      },
+      "amber-hover": {
+        "role": "primary",
+        "displayName": "Amber Hover",
+        "tonalRamp": [
+          "oklch(15% 0.1642 88.17)",
+          "oklch(26% 0.1642 88.17)",
+          "oklch(38% 0.1642 88.17)",
+          "oklch(49% 0.1642 88.17)",
+          "oklch(61% 0.1642 88.17)",
+          "oklch(72% 0.1642 88.17)",
+          "oklch(84% 0.1642 88.17)",
+          "oklch(95% 0.1642 88.17)"
+        ]
+      },
+      "on-amber": {
+        "role": "neutral",
+        "displayName": "On Amber",
+        "tonalRamp": [
+          "oklch(15% 0.0396 95.19)",
+          "oklch(26% 0.0396 95.19)",
+          "oklch(38% 0.0396 95.19)",
+          "oklch(49% 0.0396 95.19)",
+          "oklch(61% 0.0396 95.19)",
+          "oklch(72% 0.0396 95.19)",
+          "oklch(84% 0.0396 95.19)",
+          "oklch(95% 0.0396 95.19)"
+        ]
+      },
+      "good": {
+        "role": "secondary",
+        "displayName": "Good",
+        "tonalRamp": [
+          "oklch(15% 0.1803 154.00)",
+          "oklch(26% 0.1803 154.00)",
+          "oklch(38% 0.1803 154.00)",
+          "oklch(49% 0.1803 154.00)",
+          "oklch(61% 0.1803 154.00)",
+          "oklch(72% 0.1803 154.00)",
+          "oklch(84% 0.1803 154.00)",
+          "oklch(95% 0.1803 154.00)"
+        ]
+      },
+      "warning": {
+        "role": "secondary",
+        "displayName": "Warning",
+        "tonalRamp": [
+          "oklch(15% 0.1585 72.33)",
+          "oklch(26% 0.1585 72.33)",
+          "oklch(38% 0.1585 72.33)",
+          "oklch(49% 0.1585 72.33)",
+          "oklch(61% 0.1585 72.33)",
+          "oklch(72% 0.1585 72.33)",
+          "oklch(84% 0.1585 72.33)",
+          "oklch(95% 0.1585 72.33)"
+        ]
+      },
+      "error": {
+        "role": "secondary",
+        "displayName": "Error",
+        "tonalRamp": [
+          "oklch(15% 0.1987 23.91)",
+          "oklch(26% 0.1987 23.91)",
+          "oklch(38% 0.1987 23.91)",
+          "oklch(49% 0.1987 23.91)",
+          "oklch(61% 0.1987 23.91)",
+          "oklch(72% 0.1987 23.91)",
+          "oklch(84% 0.1987 23.91)",
+          "oklch(95% 0.1987 23.91)"
+        ]
+      },
+      "joycon-left": {
+        "role": "secondary",
+        "displayName": "Joycon Left",
+        "tonalRamp": [
+          "oklch(15% 0.1287 216.76)",
+          "oklch(26% 0.1287 216.76)",
+          "oklch(38% 0.1287 216.76)",
+          "oklch(49% 0.1287 216.76)",
+          "oklch(61% 0.1287 216.76)",
+          "oklch(72% 0.1287 216.76)",
+          "oklch(84% 0.1287 216.76)",
+          "oklch(95% 0.1287 216.76)"
+        ]
+      },
+      "joycon-right": {
+        "role": "secondary",
+        "displayName": "Joycon Right",
+        "tonalRamp": [
+          "oklch(15% 0.1972 27.94)",
+          "oklch(26% 0.1972 27.94)",
+          "oklch(38% 0.1972 27.94)",
+          "oklch(49% 0.1972 27.94)",
+          "oklch(61% 0.1972 27.94)",
+          "oklch(72% 0.1972 27.94)",
+          "oklch(84% 0.1972 27.94)",
+          "oklch(95% 0.1972 27.94)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "headline": {
+        "displayName": "Lobby Headline",
+        "purpose": "Native device title; 96-DPI logical DIP values encoded as px in frontmatter."
+      },
+      "title": {
+        "displayName": "Controller Title",
+        "purpose": "Windows Variable Display when available; Segoe UI fallback."
+      }
+    },
+    "shadows": [
+      {
+        "name": "native-popup",
+        "value": "Four black rounded-rectangle layers; expansions 3/6/9/12 DIP, y offset 6 DIP, each alpha 0.35/4.",
+        "purpose": "Actual controller dropdown overlay only."
+      },
+      {
+        "name": "native-dialog",
+        "value": "Same four layers at alpha 0.5/4, plus 55% black backdrop.",
+        "purpose": "Actual controller dialog overlay only."
+      }
+    ],
+    "motion": [
+      {
+        "name": "capture",
+        "value": "1.3 Hz sine pulse; 5 second timeout",
+        "purpose": "Binding capture and exact diagram control highlight."
+      },
+      {
+        "name": "binding-flash",
+        "value": "Linear fade over 0.9 seconds",
+        "purpose": "Successful binding feedback."
+      },
+      {
+        "name": "toggle",
+        "value": "Per update interpolation: current += (target-current)*0.35",
+        "purpose": "Controller switch state; frame-dependent native implementation, not a CSS timing claim."
+      }
+    ],
+    "breakpoints": [],
+    "platform": {
+      "runtime": "Native Windows C++/Win32/Direct2D/DirectWrite",
+      "units": "Logical DIPs; px values in frontmatter are portability notation at 96 DPI.",
+      "controllerDefault": "1200 x 760 DIP",
+      "controllerMinimum": "1040 x 700 DIP",
+      "snippets": "All HTML/CSS entries are illustrative translations for the design panel, never shipped UI source. Browser focus and active rules approximate native state visuals.",
+      "tonalRamps": "Synthesized OKLCH panel metadata only; not implemented colors or normative application ramps.",
+      "artwork": "assets/joycon-reference.png; original transparent pixels, runtime front/top source crops; provenance in adjacent .png.json.",
+      "driftNotCanonized": "Small uppercase functional captions, local control renderer differences and stale glow comments are observed, not repaired or promoted."
+    }
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Illustrative HTML/CSS translation of the native shared painter; not application source or a behavioral implementation.",
+      "html": "<button class=\"ds-primary-button\">Play</button>",
+      "css": ".ds-primary-button{font-family:'Segoe UI Variable Text','Segoe UI',sans-serif;font-size:14px;font-weight:600;border-radius:6px;min-height:38px;padding:0 18px;cursor:pointer;background:#FBBB04;color:#1A1400;border:1px solid transparent;} .ds-primary-button:hover{background:#FFCB33;} .ds-primary-button:focus-visible{outline:2px solid #FBBB04;outline-offset:3px;} .ds-primary-button:active{transform:scale(.98);} .ds-primary-button:disabled{opacity:.4;cursor:default;}"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Illustrative HTML/CSS translation of the native shared painter; not application source or a behavioral implementation.",
+      "html": "<button class=\"ds-secondary-button\">Cancel</button>",
+      "css": ".ds-secondary-button{font-family:'Segoe UI Variable Text','Segoe UI',sans-serif;font-size:14px;font-weight:600;border-radius:6px;min-height:38px;padding:0 18px;cursor:pointer;background:#282A2F;color:#F1F2F3;border:1px solid #41444B;} .ds-secondary-button:hover{background:#303339;} .ds-secondary-button:focus-visible{outline:2px solid #FBBB04;outline-offset:3px;} .ds-secondary-button:active{transform:scale(.98);} .ds-secondary-button:disabled{opacity:.4;cursor:default;}"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Illustrative HTML/CSS translation of the native shared painter; not application source or a behavioral implementation.",
+      "html": "<button class=\"ds-ghost-button\">Settings</button>",
+      "css": ".ds-ghost-button{font-family:'Segoe UI Variable Text','Segoe UI',sans-serif;font-size:14px;font-weight:600;border-radius:6px;min-height:38px;padding:0 18px;cursor:pointer;background:transparent;color:#B7BAC0;border:1px solid transparent;} .ds-ghost-button:hover{background:rgba(255,255,255,.06);} .ds-ghost-button:focus-visible{outline:2px solid #FBBB04;outline-offset:3px;} .ds-ghost-button:active{transform:scale(.98);} .ds-ghost-button:disabled{opacity:.4;cursor:default;}"
+    },
+    {
+      "name": "Connection Field",
+      "kind": "input",
+      "refersTo": "connection-field",
+      "description": "Illustrative translation only; application field is a Win32 EDIT with a painted surround.",
+      "html": "<input class=\"ds-field\" aria-label=\"Host address\" value=\"192.0.2.10\">",
+      "css": ".ds-field{font-family:'Segoe UI Variable Text','Segoe UI',sans-serif;font-size:14px;height:44px;padding:0 12px;background:#282A2F;color:#F1F2F3;border:1px solid #41444B;border-radius:6px;} .ds-field:hover{border-color:#A0A4AC;} .ds-field:focus-visible{outline:none;border-color:#FBBB04;}"
+    },
+    {
+      "name": "Input Tabs",
+      "kind": "nav",
+      "description": "Illustrative translation of controller tabs. Static selected state; no JavaScript or native behavior is included.",
+      "html": "<nav class=\"ds-tabs\" aria-label=\"Input type\"><button aria-current=\"page\">Gamepad</button><button>Keyboard</button></nav>",
+      "css": ".ds-tabs{display:flex;width:236px;padding:3px;background:#1B1E23;border:1px solid #41444B;border-radius:9px;} .ds-tabs button{font-family:'Segoe UI Variable Text','Segoe UI',sans-serif;font-size:14px;position:relative;flex:1;height:28px;border:0;border-radius:7px;background:transparent;color:#B7BAC0;} .ds-tabs button[aria-current]{background:#303339;color:#F1F2F3;font-weight:600;} .ds-tabs button[aria-current]:after{content:\"\";position:absolute;bottom:2px;left:calc(50% - 14px);width:28px;height:2px;background:#FBBB04;} .ds-tabs button:hover{background:#282A2F;} .ds-tabs button:focus-visible{outline:2px solid #FBBB04;}"
+    },
+    {
+      "name": "Connection Badge",
+      "kind": "chip",
+      "description": "Illustrative translation of shared status pill; text supplements dot color.",
+      "html": "<span class=\"ds-status\"><i></i>Connected</span>",
+      "css": ".ds-status{font-family:'Segoe UI Variable Text','Segoe UI',sans-serif;font-size:14px;display:inline-flex;align-items:center;gap:9px;height:26px;padding:0 8px 0 9px;border-radius:5px;background:#202226;color:#F1F2F3;font-size:12.5px;font-weight:500;} .ds-status i{width:8px;height:8px;border-radius:50%;background:#3DDC84;}"
+    },
+    {
+      "name": "Binding Target",
+      "kind": "button",
+      "refersTo": "binding",
+      "description": "Illustrative translation of native binding target; real diagram hit testing and capture are C++.",
+      "html": "<button class=\"ds-binding\">Button A</button>",
+      "css": ".ds-binding{font-family:'Segoe UI Variable Text','Segoe UI',sans-serif;font-size:14px;font-size:13.5px;height:32px;padding:0 8px;border:1px solid #41444B;border-radius:7px;background:#282A2F;color:#F1F2F3;} .ds-binding:hover{background:#303339;border-color:#4A515C;} .ds-binding:focus-visible{outline:1.5px solid #FBBB04;outline-offset:-1.5px;} .ds-binding:active{background:rgba(251,187,4,.1);border-color:#FBBB04;}"
+    },
+    {
+      "name": "Functional Controller Pane",
+      "kind": "card",
+      "refersTo": "controller-panel",
+      "description": "Illustrative tonal container only; real controller panes contain mapping controls or the original artwork, not dashboard cards.",
+      "html": "<section class=\"ds-pane\">Controller mappings</section>",
+      "css": ".ds-pane{font-family:'Segoe UI Variable Text','Segoe UI',sans-serif;font-size:14px;padding:18px;border-radius:12px;background:#202226;color:#F1F2F3;}"
+    }
+  ],
+  "narrative": {
+    "northStar": "A precise remote-play utility",
+    "overview": "Hikari is a native C++ Windows application rendered with Win32, Direct2D and DirectWrite. Its matte graphite surfaces, restrained Hikari amber and compact Windows controls put connection state and useful actions first. These are the user-approved materials, recorded from the built implementation rather than a web or mobile redesign.\n\nThe supplied Hikari logo and original transparent Joy-Con image carry the product identity. The controller diagram is an interactive mapping surface: selecting a real control identifies its binding, while precise amber overlays show capture and live input. Preview screens explicitly identify sample data.",
+    "keyCharacteristics": [
+      "Compact native desktop controls and left-aligned information.",
+      "Flat graphite surfaces, thin boundaries and restrained amber state feedback.",
+      "Original supplied artwork with preserved transparent pixels.",
+      "Motion attached to progress, capture, input feedback and transient status."
+    ],
+    "rules": [],
+    "dos": [
+      "**Do** preserve the supplied Hikari logo and the original transparent Joy-Con pixels and provenance.",
+      "**Do** show the current connection state, next useful action and visible keyboard focus.",
+      "**Do** keep input feedback aligned to the actual control and mapping target.",
+      "**Do** label preview sample states explicitly and keep styling outside the streaming data path."
+    ],
+    "donts": [
+      "**Don't** add decorative background glows, glass panels, breathing primary actions or dashboard cards.",
+      "**Don't** replace this Win32/Direct2D implementation with web or mobile conventions.",
+      "**Don't** infer live hardware readiness or latency measurements from offline preview screens.",
+      "**Don't** promote local renderer differences or tiny functional captions into new global visual rules."
+    ]
+  }
+}
