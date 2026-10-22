@@ -22,10 +22,10 @@ The desktop build targets **Windows 10/11 only** (Media Foundation, D3D11, WASAP
 ```powershell
 git clone https://github.com/thiagofnc/Hikari-remote-play.git
 cd Hikari-remote-play
-.\scripts\build.ps1
+.\scripts\build.ps1 -Opus -Tests
 ```
 
-`build.ps1` finds Visual Studio (or llvm-mingw), configures a Release build, builds everything and runs the tests. Outputs land in `build\bin\`.
+`build.ps1` finds Visual Studio (or llvm-mingw) and configures a Release build. `-Opus` enables compressed audio; `-Tests` runs CTest after building. Outputs default to `%LOCALAPPDATA%\Hikari-build\<toolchain>-Release\bin`, outside the checkout to avoid long paths. Use `-BuildDir` to choose another directory. Without `-Opus`, the script builds PCM audio support.
 
 ### Plain CMake
 
@@ -64,6 +64,8 @@ Release builds link the C/C++ runtime statically (`/MT` on MSVC, `-static` on Mi
 | `hikari_media` | `media/` | D3D11 + Media Foundation plumbing shared by host and client |
 | `hikari_host_core` | `host/src/` | Capture, GPU convert, encoder, HDMI audio, bridge driver |
 | `hikari_client_ui` | `client/src/` | Input mapping and Controller Settings |
+| `hikari_ui` | `ui/` | Shared Direct2D theme and widgets |
+| `hikari_client` | `client/src/` | Network, input, audio, decoding and presentation |
 | `Hikari` | `app/` | The single `Hikari.exe` |
 | `hikari-*` | `tools/` | Probe and test tools |
 | `hikari_tests` | `tests/` | Unit tests |
@@ -79,6 +81,20 @@ Release builds link the C/C++ runtime statically (`/MT` on MSVC, `-static` on Mi
 | `tests/test_transport.cpp` | Video transport on a clean path, FEC repairing one loss per group, two losses in a group abandoned at the deadline, reordering within the window, a whole frame missing, random-loss statistics |
 
 Run them with `ctest` (above) or directly with `build\bin\hikari_tests.exe`.
+
+CTest also runs the controller mapping self-test, a hidden desktop startup/rendering/resource smoke test, and `hikari_session_tests`. The session test uses a random loopback UDP port to exercise wrong-code rejection, authenticated input, video delivery, clock sync and reconnection without console hardware. Run `hikari-netsim --selftest` separately for timed network impairment checks.
+
+These tests do not validate physical capture, hardware decoding, bridge timing or remote wake. Measure those with the actual hardware using [profiling.md](profiling.md).
+
+### Running and packaging
+
+Run `Hikari.exe` for the remembered role or the first-run chooser. Use `--setup` to choose again, or `--host` / `--client` to select a role directly. Settings and controller mappings live in `%LOCALAPPDATA%\Hikari\hikari.ini`.
+
+```powershell
+.\scripts\package.ps1 -BuildDir C:\hikari-build -Version 0.1.0
+```
+
+Packaging writes the standalone app, ZIP and checksums to `dist`; it does not publish a GitHub release.
 
 ### Fuzzing the link parser
 

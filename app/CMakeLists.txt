@@ -4,3 +4,7 @@ target_link_libraries(Hikari PRIVATE hikari_client hikari_host shell32)
 if(MINGW)
     target_link_options(Hikari PRIVATE -municode)
 endif()
+if(MSVC)
+    # The application manifest is already embedded by hikari.rc.
+    target_link_options(Hikari PRIVATE /MANIFEST:NO)
+endif()

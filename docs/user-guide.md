@@ -22,7 +22,7 @@ Windows SmartScreen may warn about a new, unsigned executable. Choose *More info
 > **Is this PC connected to your Switch, or is it where you'll play?**
 > **[ Host ]**  **[ Client ]**
 
-Your answer is remembered. You can change it later in **Settings**.
+Your answer is remembered. Launch `Hikari.exe --setup` to choose again, or use `--host` / `--client` to select a role directly.
 
 ### On the Host (the PC at home)
 
@@ -40,7 +40,7 @@ Below the checklist the Host shows:
 - **Pairing code**, e.g. `K7QM-2XPA-9TRB`. Clients need it once. You can generate a new one in Settings, which un-pairs every client.
 - **This PC's addresses**: LAN (e.g. `192.168.1.20`) and Tailscale (`100.x.y.z` and its MagicDNS name, when Tailscale is running).
 
-Enable **Start with Windows** and close the window: the host keeps running in the **tray**. Its tray icon shows whether a client is connected and what state the console is in.
+Close the window to keep the host running in the **tray**. Click the tray icon to reopen the status window, or right-click it to quit. Automatic startup at login is not yet exposed in the app.
 
 ### On the Client (the PC where you play)
 
@@ -110,7 +110,7 @@ Open **Settings → Controller**. A Joy-Con drawing shows every Switch input. Cl
 | Triggers → ZL/ZR | pressed past ~25 % travel | The HORI wired profile has digital ZL/ZR. The analog value still travels end to end for future profiles. |
 | Keyboard | on | Bind any key to any Switch input, including stick directions. |
 
-**Profiles**: save mappings as named profiles (e.g. *Default*, *Fighting*, *Keyboard*) and switch between them from the same screen. They're stored in `%LOCALAPPDATA%\Hikari\client.ini` as `[mapping.<name>]` sections.
+**Profiles**: save mappings as named profiles (e.g. *Default*, *Fighting*, *Keyboard*) and switch between them from the same screen. They're stored in `%LOCALAPPDATA%\Hikari\hikari.ini` as `[mapping.<name>]` sections.
 
 ## Settings
 
@@ -140,11 +140,11 @@ How the client presents frames. Cycle it any time with <kbd>F2</kbd>:
 
 | Setting | Notes |
 | --- | --- |
-| Start with Windows | Runs in the tray at login. |
+| Start with Windows | Planned; no automatic-startup toggle is available yet. |
 | Pairing code | Show or regenerate. Regenerating un-pairs all clients. |
 | Re-detect hardware | Re-runs capture, audio and encoder detection (e.g. after a driver update or new capture card). |
-| Audio codec | PCM (lowest CPU, ~1.5 Mbps) or Opus (~160 kbps, for slow uplinks). |
+| Audio codec | Opus when built with Opus support; otherwise PCM. Set `[host] audio_opus=false` in `hikari.ini` to prefer PCM. No codec selector is available yet. |
 
 ### Where settings live
 
-`%LOCALAPPDATA%\Hikari\` holds the INI files the app writes: detected hardware, paired hosts and mappings. You never need to edit them. Any value can be overridden for one run from the command line with `--section.key=value`.
+`%LOCALAPPDATA%\Hikari\hikari.ini` holds detected hardware, the saved host, pairing code and controller mappings. The client Settings window edits the host and pairing code; stream presets and controller settings are accessible from the lobby. Advanced options currently require editing the INI file while Hikari is closed.
