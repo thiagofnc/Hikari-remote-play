@@ -2,6 +2,7 @@
 # the UI can be run and tested without the rest of the client.
 # `hikari_controller_demo --selftest` runs the mapping unit checks.
 if(TARGET hikari_client_ui)
-    add_executable(hikari_controller_demo main.cpp)
+    enable_language(RC)
+    add_executable(hikari_controller_demo main.cpp ../../assets/joycon.rc)
     target_link_libraries(hikari_controller_demo PRIVATE hikari_client_ui)
 endif()

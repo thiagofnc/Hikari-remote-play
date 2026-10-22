@@ -19,6 +19,7 @@
 #include "hikari/system.h"
 #include "hk_link.h"
 #include "joycon_art.h"
+#include "hikari/ui_kit.h"
 
 namespace hikari {
 
@@ -28,15 +29,15 @@ using Microsoft::WRL::ComPtr;
 
 // ---- palette -----------------------------------------------------------------
 
-constexpr uint32_t kBg = 0x1E2127;
-constexpr uint32_t kPanel = 0x262A31;
-constexpr uint32_t kPanelBorder = 0x30353D;
-constexpr uint32_t kControl = 0x2F343C;
-constexpr uint32_t kControlHover = 0x383E47;
-constexpr uint32_t kControlBorder = 0x3C424C;
-constexpr uint32_t kText = 0xE6E6E6;
-constexpr uint32_t kText2 = 0x9AA0A6;
-constexpr uint32_t kText3 = 0x6B7178;
+constexpr uint32_t kBg = ui::theme::kBg;
+constexpr uint32_t kPanel = ui::theme::kBg2;
+constexpr uint32_t kPanelBorder = ui::theme::kBorder;
+constexpr uint32_t kControl = ui::theme::kSurface;
+constexpr uint32_t kControlHover = ui::theme::kSurface2;
+constexpr uint32_t kControlBorder = ui::theme::kBorder;
+constexpr uint32_t kText = ui::theme::kText;
+constexpr uint32_t kText2 = ui::theme::kText2;
+constexpr uint32_t kText3 = ui::theme::kText3;
 constexpr uint32_t kAmber = 0xFBBB04;
 constexpr uint32_t kInk = 0x1E2127;
 constexpr uint32_t kGreen = 0x3DDC84;
@@ -732,7 +733,7 @@ void SettingsWindow::compute_layout()
 
     // Content cards.
     const float top = 148.0f, bottom = L.h - 74.0f;
-    const float left_w = std::clamp(L.w * 0.56f, 600.0f, 800.0f);
+    const float left_w = std::clamp(L.w * 0.57f, 600.0f, 800.0f);
     L.left_card = {M, top, M + left_w, bottom};
     L.art_card = {L.left_card.right + 16, top, L.w - M, bottom};
 
@@ -755,7 +756,7 @@ void SettingsWindow::compute_layout()
     L.slider_label = {in.left, sy, in.left + 120, sy + 30};
     L.slider_track = {in.left + 130, sy + 13, in.left + 130 + std::min(260.0f, in.right - in.left - 260), sy + 17};
     L.slider_hit = {L.slider_track.left - 10, sy, L.slider_track.right + 10, sy + 30};
-    L.slider_value = {L.slider_track.right + 16, sy, in.right, sy + 30};
+    L.slider_value = {L.slider_track.right + 16, sy, L.slider_track.right + 72, sy + 30};
 
     // Binding columns.
     const float grid_top = L.tabs.bottom + 18.0f, grid_bottom = L.options_divider - 14.0f;
@@ -1220,19 +1221,9 @@ void SettingsWindow::dropdown(const D2D1_RECT_F& r, const std::wstring& value, H
 
 void SettingsWindow::draw_header()
 {
-    // Hikari mark: an amber sun (光 = light).
-    const D2D1_POINT_2F c = {24.0f + 15.0f, 36.0f};
-    brush_->SetColor(col(kAmber));
-    rt_->FillEllipse(D2D1::Ellipse(c, 6.5f, 6.5f), brush_.Get());
-    for (int i = 0; i < 8; ++i) {
-        const float a = static_cast<float>(i) * kPi / 4.0f;
-        const float ca = std::cos(a), sa = std::sin(a);
-        rt_->DrawLine({c.x + ca * 10.0f, c.y + sa * 10.0f}, {c.x + ca * 14.0f, c.y + sa * 14.0f}, brush_.Get(), 2.2f,
-                      round_.Get());
-    }
-    text(L"Controller Settings", {24 + 42, 14, lay_.w - 300, 44}, f_title_.Get(), col(kText));
-    text(L"Map any controller or keyboard to Switch inputs", {24 + 43, 42, lay_.w - 300, 60}, f_sub_.Get(),
-         col(kText2));
+    text(L"Controller settings", {24, 16, lay_.w - 300, 46}, f_title_.Get(), col(kText));
+    text(L"Choose a binding, then press the button or key to use.", {24, 48, lay_.w - 100, 70}, f_sub_.Get(), col(kText2));
+
 }
 
 void SettingsWindow::draw_toolbar()
@@ -1318,7 +1309,6 @@ void SettingsWindow::draw_bindings()
 {
     const D2D1_RECT_F card = lay_.left_card;
     fill_rr(card, 12, col(kPanel));
-    stroke_rr(card, 12, col(kPanelBorder), 1.0f);
 
     // Gamepad / Keyboard segmented tabs.
     fill_rr(lay_.tabs, 9, col(0x1B1E23));
@@ -1376,7 +1366,7 @@ void SettingsWindow::draw_options()
     const float y = std::floor(lay_.options_divider) + 0.5f;
     rt_->DrawLine({lay_.left_card.left + 18, y}, {lay_.left_card.right - 18, y}, brush_.Get(), 1.0f);
 
-    static const wchar_t* const kLabels[3] = {L"Analog sticks pass-through", L"Analog triggers", L"Keyboard enabled"};
+    static const wchar_t* const kLabels[3] = {L"Analog sticks", L"Analog triggers", L"Keyboard enabled"};
     for (int i = 0; i < 3; ++i) {
         const D2D1_RECT_F r = lay_.toggles[i];
         const bool hov = hover_ == Hit{El::Toggle, i};
@@ -1414,19 +1404,16 @@ void SettingsWindow::draw_options()
     swprintf(buf, 48, L"%d%%", static_cast<int>(std::lround(work_.stick_deadzone * 100.0f)));
     text(buf, {lay_.slider_value.left, lay_.slider_value.top, lay_.slider_value.left + 44, lay_.slider_value.bottom},
          f_body_sb_.Get(), col(kText));
-    text(L"The console adds its own deadzone — keep this low",
-         {lay_.slider_value.left + 48, lay_.slider_value.top, lay_.slider_value.right, lay_.slider_value.bottom},
-         f_small_.Get(), col(kText3));
+
 }
 
 void SettingsWindow::draw_art_card()
 {
     const D2D1_RECT_F card = lay_.art_card;
     fill_rr(card, 12, col(kPanel));
-    stroke_rr(card, 12, col(kPanelBorder), 1.0f);
 
     const D2D1_RECT_F a = lay_.pill_anchor;
-    text(L"LIVE PREVIEW", {a.left + 2, a.top, a.right, a.bottom}, f_caption_.Get(), col(kText2));
+    text(L"Controller", {a.left + 2, a.top, a.right, a.bottom}, f_caption_.Get(), col(kText2));
 
     // Status pill, right-aligned.
     std::wstring status;
@@ -1832,8 +1819,14 @@ bool SettingsWindow::run(HWND parent)
 
 bool show_controller_settings(HWND parent, Config& cfg, InputMapping& mapping, const ControllerSettingsDeps& deps)
 {
-    SettingsWindow w(cfg, mapping, deps);
-    return w.run(parent);
+    const HRESULT com = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    bool saved = false;
+    {
+        SettingsWindow w(cfg, mapping, deps);
+        saved = w.run(parent);
+    }
+    if (SUCCEEDED(com)) CoUninitialize();
+    return saved;
 }
 
 }  // namespace hikari

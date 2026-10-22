@@ -14,3 +14,7 @@ set_tests_properties(hikari_session_tests PROPERTIES TIMEOUT 30)
 add_test(NAME hikari_controller_mapping COMMAND hikari_controller_demo --selftest)
 add_test(NAME hikari_app_startup COMMAND Hikari --selftest)
 set_tests_properties(hikari_app_startup PROPERTIES TIMEOUT 15)
+
+add_executable(hikari_diagram_tests test_diagram.cpp ../assets/joycon.rc)
+target_link_libraries(hikari_diagram_tests PRIVATE hikari_client_ui)
+add_test(NAME hikari_controller_diagram COMMAND hikari_diagram_tests)

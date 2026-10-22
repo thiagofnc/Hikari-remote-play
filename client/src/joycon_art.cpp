@@ -1,538 +1,177 @@
 #include "joycon_art.h"
-
 #include <algorithm>
 #include <cmath>
 #include <cwchar>
 
 namespace hikari::joycon {
-
 using Microsoft::WRL::ComPtr;
-
 namespace {
-
-// Design space (arbitrary units): two Joy-Cons 150 x 390 with a 26 unit gap,
-// shoulder buttons rising above y = 0.
-constexpr float kW = 150.0f, kH = 390.0f, kGap = 26.0f;
-constexpr float kTotalW = kW * 2 + kGap;
-constexpr float kR = 64.0f;  // outer corner radius
-constexpr float kPi = 3.14159265f;
-constexpr D2D1_RECT_F kCanvas = {-34.0f, -58.0f, kTotalW + 34.0f, kH + 22.0f};
-
+constexpr float kWidth = 344;
+constexpr D2D1_RECT_F kCanvas{-18, -150, 362, 445};
+constexpr D2D1_POINT_2F kLeftStick{74, 115}, kRightStick{270, 229};
 constexpr uint32_t kAmber = 0xFBBB04;
-constexpr uint32_t kButton = 0x24282E;
-constexpr uint32_t kLabel = 0xD6DAE0;
-constexpr uint32_t kInk = 0x1E2127;
-
 constexpr int in(SwitchInput s) { return static_cast<int>(s); }
-
-// Element positions; the right Joy-Con mirrors the left around the centre line.
-constexpr float mx(float x) { return kTotalW - x; }
-constexpr D2D1_POINT_2F kMinus = {118, 30}, kPlus = {mx(118), 30};
-constexpr D2D1_POINT_2F kLStick = {78, 104}, kFace = {mx(78), 104};
-constexpr D2D1_POINT_2F kDpad = {78, 216}, kRStick = {mx(78), 216};
-constexpr D2D1_POINT_2F kCapture = {106, 304}, kHome = {mx(106), 304};
-constexpr float kFaceR = 15.0f, kFaceD = 31.0f;
-constexpr float kWellR = 36.0f, kCapR = 27.0f, kTravel = 9.0f, kChevronR = 47.0f;
-
-D2D1_COLOR_F col(uint32_t rgb, float a = 1.0f) { return D2D1::ColorF(rgb, a); }
-
-// Builds mirrored paths: x is flipped and arc sweeps reverse on the right side.
-struct PathBuilder {
-    ID2D1GeometrySink* sink;
-    bool mirror;
-    D2D1_POINT_2F p(float x, float y) const { return {mirror ? mx(x) : x, y}; }
-    D2D1_POINT_2F polar(float r, float deg) const
-    {
-        const float a = deg * kPi / 180.0f;
-        return p(kR + r * std::cos(a), kR + r * std::sin(a));
-    }
-    void begin(D2D1_POINT_2F at) { sink->BeginFigure(at, D2D1_FIGURE_BEGIN_FILLED); }
-    void line(D2D1_POINT_2F to) { sink->AddLine(to); }
-    void arc(D2D1_POINT_2F to, float r, bool clockwise)
-    {
-        const bool cw = clockwise != mirror;
-        sink->AddArc(D2D1::ArcSegment(to, D2D1::SizeF(r, r), 0.0f,
-                                      cw ? D2D1_SWEEP_DIRECTION_CLOCKWISE : D2D1_SWEEP_DIRECTION_COUNTER_CLOCKWISE,
-                                      D2D1_ARC_SIZE_SMALL));
-    }
-    void end() { sink->EndFigure(D2D1_FIGURE_END_CLOSED); }
+float distance(D2D1_POINT_2F a, D2D1_POINT_2F b) { return std::hypot(a.x-b.x, a.y-b.y); }
+D2D1_COLOR_F color(uint32_t value, float alpha=1) { return D2D1::ColorF(value, alpha); }
+struct Control { D2D1_POINT_2F center; float radius; SwitchInput input; const wchar_t* label; };
+constexpr Control kControls[] = {
+    {{270,82},15,SwitchInput::X,L"X"}, {{270,144},15,SwitchInput::B,L"B"},
+    {{239,113},15,SwitchInput::Y,L"Y"}, {{301,113},15,SwitchInput::A,L"A"},
+    {{74,202},15,SwitchInput::DpadUp,nullptr}, {{74,264},15,SwitchInput::DpadDown,nullptr},
+    {{43,233},15,SwitchInput::DpadLeft,nullptr}, {{105,233},15,SwitchInput::DpadRight,nullptr},
+    {{115,48},12,SwitchInput::Minus,nullptr}, {{227,48},13,SwitchInput::Plus,nullptr},
+    {{96,313},13,SwitchInput::Capture,nullptr}, {{247,307},16,SwitchInput::Home,nullptr},
 };
-
-template <typename F>
-ComPtr<ID2D1PathGeometry> make_path(ID2D1Factory* f, F&& build)
+float emphasis(int input, const ArtState& s)
 {
-    ComPtr<ID2D1PathGeometry> g;
-    ComPtr<ID2D1GeometrySink> sink;
-    if (FAILED(f->CreatePathGeometry(&g)) || FAILED(g->Open(&sink))) return nullptr;
-    sink->SetFillMode(D2D1_FILL_MODE_WINDING);
-    build(sink.Get());
-    if (FAILED(sink->Close())) return nullptr;
-    return g;
+    if (s.target == input) return 0.65f + 0.35f*s.pulse;
+    if (s.hover == input) return 0.8f;
+    if (s.flash == input) return s.flash_amount;
+    return 0;
 }
-
-D2D1::Matrix3x2F mat(const D2D1_MATRIX_3X2_F& m) { return D2D1::Matrix3x2F(m._11, m._12, m._21, m._22, m._31, m._32); }
-
-float dist(D2D1_POINT_2F a, D2D1_POINT_2F b) { return std::hypot(a.x - b.x, a.y - b.y); }
-
-D2D1_POINT_2F offset(D2D1_POINT_2F c, float dx, float dy) { return {c.x + dx, c.y + dy}; }
-
-}  // namespace
+}
 
 bool JoyConArt::create(ID2D1Factory* factory)
 {
-    factory_ = factory;
-    for (int side = 0; side < 2; ++side) {
-        const bool m = side == 1;
-        // Body: rounded rail on the inner edge, big curved corners outside.
-        body_[side] = make_path(factory, [&](ID2D1GeometrySink* s) {
-            PathBuilder b{s, m};
-            const float r = 9.0f;
-            b.begin(b.p(kR, 0));
-            b.line(b.p(kW - r, 0));
-            b.arc(b.p(kW, r), r, true);
-            b.line(b.p(kW, kH - r));
-            b.arc(b.p(kW - r, kH), r, true);
-            b.line(b.p(kR, kH));
-            b.arc(b.p(0, kH - kR), kR, true);
-            b.line(b.p(0, kR));
-            b.arc(b.p(kR, 0), kR, true);
-            b.end();
-        });
-        // L / R: a band hugging the top outer corner.
-        shoulder_[side] = make_path(factory, [&](ID2D1GeometrySink* s) {
-            PathBuilder b{s, m};
-            b.begin(b.polar(68, 200));
-            b.arc(b.p(kR, -4), 68, true);
-            b.line(b.p(120, -4));
-            b.arc(b.p(120, -18), 7, false);
-            b.line(b.p(kR, -18));
-            b.arc(b.polar(82, 200), 82, false);
-            b.end();
-        });
-        // ZL / ZR: the larger trigger behind it.
-        trigger_[side] = make_path(factory, [&](ID2D1GeometrySink* s) {
-            PathBuilder b{s, m};
-            b.begin(b.polar(88, 222));
-            b.arc(b.p(kR, -24), 88, true);
-            b.line(b.p(108, -24));
-            b.arc(b.p(108, -42), 9, false);
-            b.line(b.p(kR, -42));
-            b.arc(b.polar(106, 222), 106, false);
-            b.end();
-        });
+    // Decode the unmodified transparent image once; select views when drawing.
+    ComPtr<IWICImagingFactory> wic;
+    if (FAILED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&wic)))) return false;
+    const HMODULE module = GetModuleHandleW(nullptr);
+    const HRSRC resource = FindResourceW(module, MAKEINTRESOURCEW(102), RT_RCDATA);
+    if (!resource) return false;
+    const HGLOBAL loaded = LoadResource(module, resource);
+    auto* data = static_cast<BYTE*>(LockResource(loaded));
+    ComPtr<IWICStream> stream;
+    ComPtr<IWICBitmapDecoder> decoder;
+    ComPtr<IWICBitmapFrameDecode> frame;
+    if (!data || FAILED(wic->CreateStream(&stream)) ||
+        FAILED(stream->InitializeFromMemory(data, SizeofResource(module, resource))) ||
+        FAILED(wic->CreateDecoderFromStream(stream.Get(), nullptr, WICDecodeMetadataCacheOnLoad, &decoder)) ||
+        FAILED(decoder->GetFrame(0, &frame)) || FAILED(wic->CreateFormatConverter(&source_)) ||
+        FAILED(source_->Initialize(frame.Get(), GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone,
+                                   nullptr, 0, WICBitmapPaletteTypeMedianCut))) return false;
+    for (int side=0; side<2; ++side) {
+        const auto point = [side](float x,float y) { return D2D1::Point2F(side ? kWidth-x : x,y); };
+        ComPtr<ID2D1GeometrySink> sink;
+        if (FAILED(factory->CreatePathGeometry(&shoulder_[side])) || FAILED(shoulder_[side]->Open(&sink))) return false;
+        sink->BeginFigure(point(5,-84), D2D1_FIGURE_BEGIN_FILLED);
+        sink->AddLine(point(116,-84)); sink->AddLine(point(116,-70));
+        sink->AddBezier({point(116,-63),point(111,-60),point(103,-60)});
+        sink->AddLine(point(17,-60));
+        sink->AddBezier({point(8,-60),point(5,-64),point(5,-70)});
+        sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+        if (FAILED(sink->Close())) return false;
+        sink.Reset();
+        if (FAILED(factory->CreatePathGeometry(&trigger_[side])) || FAILED(trigger_[side]->Open(&sink))) return false;
+        sink->BeginFigure(point(16,-97),D2D1_FIGURE_BEGIN_FILLED);
+        sink->AddBezier({point(29,-124),point(38,-138),point(62,-138)});
+        sink->AddLine(point(84,-138));
+        sink->AddBezier({point(105,-138),point(111,-119),point(114,-97)});
+        sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+        if (FAILED(sink->Close())) return false;
     }
-    // Unit triangle pointing up (rotated for d-pad arrows and stick chevrons).
-    triangle_ = make_path(factory, [](ID2D1GeometrySink* s) {
-        s->BeginFigure({0.0f, -0.62f}, D2D1_FIGURE_BEGIN_FILLED);
-        s->AddLine({0.58f, 0.38f});
-        s->AddLine({-0.58f, 0.38f});
-        s->EndFigure(D2D1_FIGURE_END_CLOSED);
-    });
-    house_ = make_path(factory, [](ID2D1GeometrySink* s) {
-        s->BeginFigure({0.0f, -0.6f}, D2D1_FIGURE_BEGIN_FILLED);
-        s->AddLine({0.6f, -0.05f});
-        s->AddLine({0.4f, -0.05f});
-        s->AddLine({0.4f, 0.5f});
-        s->AddLine({-0.4f, 0.5f});
-        s->AddLine({-0.4f, -0.05f});
-        s->AddLine({-0.6f, -0.05f});
-        s->EndFigure(D2D1_FIGURE_END_CLOSED);
-    });
-    for (int i = 0; i < 2; ++i)
-        if (!body_[i] || !shoulder_[i] || !trigger_[i]) return false;
-    return triangle_ && house_;
+    return true;
 }
-
 bool JoyConArt::create_device(ID2D1RenderTarget* rt)
 {
     release_device();
-    if (FAILED(rt->CreateSolidColorBrush(col(0xFFFFFF), &brush_))) return false;
+    return source_ && SUCCEEDED(rt->CreateBitmapFromWicBitmap(source_.Get(),nullptr,&bitmap_)) &&
+        SUCCEEDED(rt->CreateSolidColorBrush(color(kAmber),&brush_));
+}
+void JoyConArt::release_device() { bitmap_.Reset(); brush_.Reset(); }
 
-    auto linear = [&](uint32_t a, uint32_t b, float alpha_a, float alpha_b, ComPtr<ID2D1LinearGradientBrush>& out) {
-        const D2D1_GRADIENT_STOP stops[] = {{0.0f, col(a, alpha_a)}, {1.0f, col(b, alpha_b)}};
-        ComPtr<ID2D1GradientStopCollection> coll;
-        if (FAILED(rt->CreateGradientStopCollection(stops, 2, &coll))) return false;
-        return SUCCEEDED(rt->CreateLinearGradientBrush(
-            D2D1::LinearGradientBrushProperties({0, 0}, {kW, kH}), coll.Get(), &out));
+void JoyConArt::draw(ID2D1RenderTarget* rt,const D2D1_RECT_F& area,const ArtState& s,IDWriteTextFormat* label)
+{
+    if (!bitmap_ && !create_device(rt)) return;
+    const float width=area.right-area.left,height=area.bottom-area.top;
+    if (width<=1 || height<=1) return;
+    scale_=std::min(width/(kCanvas.right-kCanvas.left),height/(kCanvas.bottom-kCanvas.top));
+    ox_=area.left+(width-(kCanvas.right-kCanvas.left)*scale_)/2-kCanvas.left*scale_;
+    oy_=area.top+(height-(kCanvas.bottom-kCanvas.top)*scale_)/2-kCanvas.top*scale_;
+    D2D1_MATRIX_3X2_F previous;
+    rt->GetTransform(&previous);
+    const D2D1::Matrix3x2F old(previous._11,previous._12,previous._21,previous._22,previous._31,previous._32);
+    rt->SetTransform(D2D1::Matrix3x2F::Scale(scale_,scale_)*D2D1::Matrix3x2F::Translation(ox_,oy_)*old);
+    const auto view=[&](D2D1_RECT_F source,D2D1_RECT_F target) {
+        rt->DrawBitmap(bitmap_.Get(),target,1,D2D1_BITMAP_INTERPOLATION_MODE_LINEAR,source);
     };
-    // Neon blue / neon red, lit from the top left.
-    if (!linear(0x35D8F2, 0x0090B6, 1, 1, body_brush_[0])) return false;
-    if (!linear(0xFF7B6F, 0xDC4136, 1, 1, body_brush_[1])) return false;
-    if (!linear(0xFFFFFF, 0xFFFFFF, 0.28f, 0.0f, gloss_)) return false;
-
-    const D2D1_GRADIENT_STOP gs[] = {{0.0f, col(kAmber, 0.85f)}, {0.45f, col(kAmber, 0.35f)}, {1.0f, col(kAmber, 0.0f)}};
-    ComPtr<ID2D1GradientStopCollection> gcoll;
-    if (FAILED(rt->CreateGradientStopCollection(gs, 3, &gcoll))) return false;
-    return SUCCEEDED(rt->CreateRadialGradientBrush(
-        D2D1::RadialGradientBrushProperties({0, 0}, {0, 0}, 10, 10), gcoll.Get(), &glow_));
-}
-
-void JoyConArt::release_device()
-{
-    brush_.Reset();
-    body_brush_[0].Reset();
-    body_brush_[1].Reset();
-    gloss_.Reset();
-    glow_.Reset();
-}
-
-float JoyConArt::emphasis(int input, const ArtState& s, bool* is_target) const
-{
-    *is_target = input == s.target;
-    if (*is_target) return 0.55f + 0.45f * s.pulse;
-    float e = 0.0f;
-    if (input == s.hover) e = 0.75f;
-    if (input == s.flash) e = std::max(e, s.flash_amount);
-    return e;
-}
-
-void JoyConArt::draw_glow(ID2D1RenderTarget* rt, D2D1_POINT_2F c, float radius, float opacity)
-{
-    glow_->SetCenter(c);
-    glow_->SetRadiusX(radius);
-    glow_->SetRadiusY(radius);
-    glow_->SetOpacity(std::clamp(opacity, 0.0f, 1.0f));
-    rt->FillEllipse(D2D1::Ellipse(c, radius, radius), glow_.Get());
-}
-
-void JoyConArt::draw_triangle(ID2D1RenderTarget* rt, D2D1_POINT_2F c, float size, float angle_deg,
-                              const D2D1_MATRIX_3X2_F& base, const D2D1_COLOR_F& color)
-{
-    rt->SetTransform(D2D1::Matrix3x2F::Scale(size, size) * D2D1::Matrix3x2F::Rotation(angle_deg) *
-                     D2D1::Matrix3x2F::Translation(c.x, c.y) * mat(base));
-    brush_->SetColor(color);
-    rt->FillGeometry(triangle_.Get(), brush_.Get());
-    rt->SetTransform(base);
-}
-
-void JoyConArt::draw_shadowed_body(ID2D1RenderTarget* rt, int side, const D2D1_MATRIX_3X2_F& base)
-{
-    ID2D1PathGeometry* g = body_[side].Get();
-    // Soft drop shadow: a few widening translucent strokes under an offset copy.
-    rt->SetTransform(D2D1::Matrix3x2F::Translation(0, 12) * mat(base));
-    const float widths[] = {26, 16, 8};
-    for (float w : widths) {
-        brush_->SetColor(col(0x000000, 0.07f));
-        rt->DrawGeometry(g, brush_.Get(), w);
-    }
-    brush_->SetColor(col(0x000000, 0.30f));
-    rt->FillGeometry(g, brush_.Get());
-    rt->SetTransform(base);
-
-    const float x0 = side == 0 ? 0.0f : kW + kGap;
-    body_brush_[side]->SetStartPoint({x0, 0});
-    body_brush_[side]->SetEndPoint({x0 + kW, kH});
-    rt->FillGeometry(g, body_brush_[side].Get());
-
-    gloss_->SetStartPoint({x0 + (side == 0 ? 0.0f : kW), 0});
-    gloss_->SetEndPoint({x0 + kW * 0.5f, kH * 0.45f});
-    rt->FillGeometry(g, gloss_.Get());
-
-    brush_->SetColor(col(0x000000, 0.35f));
-    rt->DrawGeometry(g, brush_.Get(), 1.2f);
-
-    // Dark slider rail along the inner edge.
-    const float rx = side == 0 ? kW - 8.0f : kW + kGap + 2.0f;
-    brush_->SetColor(col(0x000000, 0.30f));
-    rt->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(rx, 14, rx + 6, kH - 14), 3, 3), brush_.Get());
-}
-
-void JoyConArt::draw_shoulder(ID2D1RenderTarget* rt, ID2D1Geometry* g, int input, float fill, const wchar_t* text,
-                              D2D1_POINT_2F label_at, const ArtState& s, IDWriteTextFormat* label)
-{
-    const bool pressed = (s.active >> input) & 1u;
-    bool target = false;
-    const float em = emphasis(input, s, &target);
-
-    if (pressed || target) {
-        brush_->SetColor(col(kAmber, pressed ? 0.30f : 0.20f + 0.25f * s.pulse));
-        rt->DrawGeometry(g, brush_.Get(), 10.0f);
-    }
-    brush_->SetColor(col(0x3A3F47));
-    rt->FillGeometry(g, brush_.Get());
-
-    D2D1_RECT_F b{};
-    g->GetBounds(nullptr, &b);
-    fill = pressed ? 1.0f : std::clamp(fill, 0.0f, 1.0f);
-    if (fill > 0.0f) {
-        // Analog travel fills from the outer tip towards the centre.
-        const bool left = b.left < kTotalW * 0.5f;
-        const float w = (b.right - b.left) * fill;
-        const D2D1_RECT_F clip = left ? D2D1::RectF(b.left, b.top, b.left + w, b.bottom)
-                                      : D2D1::RectF(b.right - w, b.top, b.right, b.bottom);
-        rt->PushAxisAlignedClip(clip, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
-        brush_->SetColor(col(kAmber, pressed ? 1.0f : 0.85f));
-        rt->FillGeometry(g, brush_.Get());
-        rt->PopAxisAlignedClip();
-    }
-    brush_->SetColor(col(0x000000, 0.45f));
-    rt->DrawGeometry(g, brush_.Get(), 1.0f);
-    if (em > 0.0f) {
-        brush_->SetColor(col(kAmber, em));
-        rt->DrawGeometry(g, brush_.Get(), 2.2f);
-    }
-
-    label->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
-    label->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
-    brush_->SetColor(fill > 0.5f ? col(kInk) : col(0xC4C9D0));
-    rt->DrawText(text, static_cast<UINT32>(wcslen(text)), label,
-                 D2D1::RectF(label_at.x - 20, label_at.y - 10, label_at.x + 20, label_at.y + 10), brush_.Get());
-}
-
-void JoyConArt::draw_round_button(ID2D1RenderTarget* rt, D2D1_POINT_2F c, float r, int input, const wchar_t* text,
-                                  float arrow_angle, const ArtState& s, IDWriteTextFormat* label)
-{
-    const bool pressed = (s.active >> input) & 1u;
-    bool target = false;
-    const float em = emphasis(input, s, &target);
-    const D2D1_MATRIX_3X2_F base = [&] {
-        D2D1_MATRIX_3X2_F m;
-        rt->GetTransform(&m);
-        return m;
-    }();
-
-    if (target) draw_glow(rt, c, r * 2.6f, 0.30f + 0.45f * s.pulse);
-    if (pressed) draw_glow(rt, c, r * 2.4f, 0.85f);
-
-    brush_->SetColor(col(0x000000, 0.40f));
-    rt->FillEllipse(D2D1::Ellipse(offset(c, 0, 1.6f), r, r), brush_.Get());
-    brush_->SetColor(pressed ? col(kAmber) : col(kButton));
-    rt->FillEllipse(D2D1::Ellipse(c, r, r), brush_.Get());
-    if (!pressed) {
-        brush_->SetColor(col(0xFFFFFF, 0.07f));
-        rt->DrawEllipse(D2D1::Ellipse(c, r - 0.8f, r - 0.8f), brush_.Get(), 1.2f);
-    }
-
-    const D2D1_COLOR_F ink = pressed ? col(kInk) : col(kLabel);
-    if (arrow_angle >= 0.0f) {
-        draw_triangle(rt, c, r * 0.62f, arrow_angle, base, ink);
-    } else if (text) {
-        label->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
-        label->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
-        brush_->SetColor(ink);
-        rt->DrawText(text, static_cast<UINT32>(wcslen(text)), label, D2D1::RectF(c.x - r, c.y - r, c.x + r, c.y + r),
-                     brush_.Get());
-    }
-    if (em > 0.0f) {
-        brush_->SetColor(col(kAmber, em));
-        rt->DrawEllipse(D2D1::Ellipse(c, r + 3.2f, r + 3.2f), brush_.Get(), 2.0f);
-    }
-}
-
-void JoyConArt::draw_stick(ID2D1RenderTarget* rt, D2D1_POINT_2F c, float x, float y, int click, int dir_base,
-                           const ArtState& s, const D2D1_MATRIX_3X2_F& base)
-{
-    // Well.
-    brush_->SetColor(col(0x101215));
-    rt->FillEllipse(D2D1::Ellipse(c, kWellR, kWellR), brush_.Get());
-    brush_->SetColor(col(0x000000, 0.45f));
-    rt->DrawEllipse(D2D1::Ellipse(c, kWellR, kWellR), brush_.Get(), 1.5f);
-
-    // Direction chevrons (up, down, left, right — SwitchInput order).
-    static const float kAngles[4] = {0, 180, 270, 90};
-    static const float kDx[4] = {0, 0, -1, 1}, kDy[4] = {-1, 1, 0, 0};
-    for (int d = 0; d < 4; ++d) {
-        const int input = dir_base + d;
-        const bool on = (s.active >> input) & 1u;
-        bool target = false;
-        const float em = emphasis(input, s, &target);
-        const D2D1_POINT_2F p = offset(c, kDx[d] * kChevronR, kDy[d] * kChevronR);
-        if (target) draw_glow(rt, p, 15.0f, 0.35f + 0.5f * s.pulse);
-        else if (on) draw_glow(rt, p, 12.0f, 0.6f);
-        D2D1_COLOR_F color = col(0x000000, 0.30f);
-        if (on) color = col(kAmber);
-        else if (em > 0.0f) color = col(kAmber, std::max(0.6f, em));
-        draw_triangle(rt, p, 9.0f, kAngles[d], base, color);
-    }
-
-    // Cap, displaced by the live stick position.
-    const bool pressed = (s.active >> click) & 1u;
-    bool target = false;
-    const float em = emphasis(click, s, &target);
-    const D2D1_POINT_2F cap = offset(c, std::clamp(x, -1.0f, 1.0f) * kTravel, -std::clamp(y, -1.0f, 1.0f) * kTravel);
-    if (target) draw_glow(rt, cap, kCapR * 2.0f, 0.30f + 0.45f * s.pulse);
-    if (pressed) draw_glow(rt, cap, kCapR * 1.9f, 0.8f);
-    brush_->SetColor(col(0x000000, 0.5f));
-    rt->FillEllipse(D2D1::Ellipse(offset(cap, 0, 2.5f), kCapR, kCapR), brush_.Get());
-    brush_->SetColor(pressed ? col(kAmber) : col(0x2D3239));
-    rt->FillEllipse(D2D1::Ellipse(cap, kCapR, kCapR), brush_.Get());
-    brush_->SetColor(col(0xFFFFFF, pressed ? 0.25f : 0.08f));
-    rt->DrawEllipse(D2D1::Ellipse(cap, kCapR - 1.2f, kCapR - 1.2f), brush_.Get(), 1.4f);
-    brush_->SetColor(pressed ? col(0xC08F00) : col(0x22262B));
-    rt->DrawEllipse(D2D1::Ellipse(cap, kCapR * 0.6f, kCapR * 0.6f), brush_.Get(), 2.5f);
-    if (em > 0.0f) {
-        brush_->SetColor(col(kAmber, em));
-        rt->DrawEllipse(D2D1::Ellipse(cap, kCapR + 3.0f, kCapR + 3.0f), brush_.Get(), 2.0f);
-    }
-}
-
-void JoyConArt::draw(ID2D1RenderTarget* rt, const D2D1_RECT_F& area, const ArtState& s, IDWriteTextFormat* label)
-{
-    if (!brush_ && !create_device(rt)) return;
-    const float cw = kCanvas.right - kCanvas.left, ch = kCanvas.bottom - kCanvas.top;
-    const float aw = area.right - area.left, ah = area.bottom - area.top;
-    if (aw <= 1 || ah <= 1) return;
-    fit_.scale = std::min(aw / cw, ah / ch);
-    fit_.ox = area.left + (aw - cw * fit_.scale) * 0.5f - kCanvas.left * fit_.scale;
-    fit_.oy = area.top + (ah - ch * fit_.scale) * 0.5f - kCanvas.top * fit_.scale;
-
-    D2D1_MATRIX_3X2_F old;
-    rt->GetTransform(&old);
-    const D2D1_MATRIX_3X2_F base = D2D1::Matrix3x2F::Scale(fit_.scale, fit_.scale) *
-                                   D2D1::Matrix3x2F::Translation(fit_.ox, fit_.oy) * mat(old);
-    rt->SetTransform(base);
-
-    // Shoulders sit behind the bodies.
-    draw_shoulder(rt, trigger_[0].Get(), in(SwitchInput::ZL), s.lt, L"ZL", {86, -33}, s, label);
-    draw_shoulder(rt, trigger_[1].Get(), in(SwitchInput::ZR), s.rt, L"ZR", {mx(86), -33}, s, label);
-    draw_shoulder(rt, shoulder_[0].Get(), in(SwitchInput::L), 0, L"L", {96, -11}, s, label);
-    draw_shoulder(rt, shoulder_[1].Get(), in(SwitchInput::R), 0, L"R", {mx(96), -11}, s, label);
-
-    draw_shadowed_body(rt, 0, base);
-    draw_shadowed_body(rt, 1, base);
-
-    // Minus / Plus.
-    auto small_button = [&](D2D1_POINT_2F c, int input, bool plus) {
-        const bool pressed = (s.active >> input) & 1u;
-        bool target = false;
-        const float em = emphasis(input, s, &target);
-        if (target) draw_glow(rt, c, 22, 0.3f + 0.45f * s.pulse);
-        if (pressed) draw_glow(rt, c, 20, 0.85f);
-        brush_->SetColor(pressed ? col(kAmber) : col(kButton));
-        rt->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(c.x - 9, c.y - 2.6f, c.x + 9, c.y + 2.6f), 1.5f, 1.5f),
-                                 brush_.Get());
-        if (plus)
-            rt->FillRoundedRectangle(
-                D2D1::RoundedRect(D2D1::RectF(c.x - 2.6f, c.y - 9, c.x + 2.6f, c.y + 9), 1.5f, 1.5f), brush_.Get());
-        if (em > 0.0f) {
-            brush_->SetColor(col(kAmber, em));
-            rt->DrawEllipse(D2D1::Ellipse(c, 14, 14), brush_.Get(), 2.0f);
-        }
-    };
-    small_button(kMinus, in(SwitchInput::Minus), false);
-    small_button(kPlus, in(SwitchInput::Plus), true);
-
-    // Face buttons: X top, B bottom, Y left, A right.
-    draw_round_button(rt, offset(kFace, 0, -kFaceD), kFaceR, in(SwitchInput::X), L"X", -1, s, label);
-    draw_round_button(rt, offset(kFace, 0, kFaceD), kFaceR, in(SwitchInput::B), L"B", -1, s, label);
-    draw_round_button(rt, offset(kFace, -kFaceD, 0), kFaceR, in(SwitchInput::Y), L"Y", -1, s, label);
-    draw_round_button(rt, offset(kFace, kFaceD, 0), kFaceR, in(SwitchInput::A), L"A", -1, s, label);
-    // D-pad buttons with arrows.
-    draw_round_button(rt, offset(kDpad, 0, -kFaceD), kFaceR, in(SwitchInput::DpadUp), nullptr, 0, s, label);
-    draw_round_button(rt, offset(kDpad, 0, kFaceD), kFaceR, in(SwitchInput::DpadDown), nullptr, 180, s, label);
-    draw_round_button(rt, offset(kDpad, -kFaceD, 0), kFaceR, in(SwitchInput::DpadLeft), nullptr, 270, s, label);
-    draw_round_button(rt, offset(kDpad, kFaceD, 0), kFaceR, in(SwitchInput::DpadRight), nullptr, 90, s, label);
-
-    draw_stick(rt, kLStick, s.lx, s.ly, in(SwitchInput::LStickClick), in(SwitchInput::LStickUp), s, base);
-    draw_stick(rt, kRStick, s.rx, s.ry, in(SwitchInput::RStickClick), in(SwitchInput::RStickUp), s, base);
-
-    // Capture: rounded square with a recessed circle.
-    {
-        const int input = in(SwitchInput::Capture);
-        const bool pressed = (s.active >> input) & 1u;
-        bool target = false;
-        const float em = emphasis(input, s, &target);
-        if (target) draw_glow(rt, kCapture, 26, 0.3f + 0.45f * s.pulse);
-        if (pressed) draw_glow(rt, kCapture, 24, 0.85f);
-        const D2D1_RECT_F r = D2D1::RectF(kCapture.x - 10, kCapture.y - 10, kCapture.x + 10, kCapture.y + 10);
-        brush_->SetColor(col(0x000000, 0.4f));
-        rt->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(r.left, r.top + 1.5f, r.right, r.bottom + 1.5f), 4, 4),
-                                 brush_.Get());
-        brush_->SetColor(pressed ? col(kAmber) : col(kButton));
-        rt->FillRoundedRectangle(D2D1::RoundedRect(r, 4, 4), brush_.Get());
-        brush_->SetColor(pressed ? col(0xC08F00) : col(0x3B4048));
-        rt->FillEllipse(D2D1::Ellipse(kCapture, 5, 5), brush_.Get());
-        if (em > 0.0f) {
-            brush_->SetColor(col(kAmber, em));
-            rt->DrawRoundedRectangle(
-                D2D1::RoundedRect(D2D1::RectF(r.left - 3.5f, r.top - 3.5f, r.right + 3.5f, r.bottom + 3.5f), 6, 6),
-                brush_.Get(), 2.0f);
+    view({28,193,182,620},{0,0,154,427});
+    view({1018,193,1172,620},{190,0,344,427});
+    view({28,18,180,138},{0,-140,152,-20});
+    view({1020,18,1172,138},{192,-140,344,-20});
+    for (const auto& c:kControls) {
+        const int input=in(c.input);
+        const bool pressed=(s.active>>input)&1u;
+        const float em=emphasis(input,s);
+        if (!pressed && em<=0) continue;
+        if (pressed) { brush_->SetColor(color(kAmber,0.65f)); rt->FillEllipse(D2D1::Ellipse(c.center,c.radius,c.radius),brush_.Get()); }
+        brush_->SetColor(color(kAmber,pressed?1:em));
+        rt->DrawEllipse(D2D1::Ellipse(c.center,c.radius+3,c.radius+3),brush_.Get(),2);
+        if (pressed && c.label) {
+            label->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+            label->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+            brush_->SetColor(color(0x17191D));
+            rt->DrawText(c.label,static_cast<UINT32>(wcslen(c.label)),label,
+                {c.center.x-c.radius,c.center.y-c.radius,c.center.x+c.radius,c.center.y+c.radius},brush_.Get());
         }
     }
-    // Home: ringed circle with a house glyph.
-    {
-        const int input = in(SwitchInput::Home);
-        const bool pressed = (s.active >> input) & 1u;
-        bool target = false;
-        const float em = emphasis(input, s, &target);
-        if (target) draw_glow(rt, kHome, 30, 0.3f + 0.45f * s.pulse);
-        if (pressed) draw_glow(rt, kHome, 28, 0.85f);
-        brush_->SetColor(col(0x000000, 0.4f));
-        rt->FillEllipse(D2D1::Ellipse(offset(kHome, 0, 1.6f), 13, 13), brush_.Get());
-        brush_->SetColor(pressed ? col(kAmber) : col(kButton));
-        rt->FillEllipse(D2D1::Ellipse(kHome, 13, 13), brush_.Get());
-        brush_->SetColor(pressed ? col(0xC08F00) : col(0x5A6069));
-        rt->DrawEllipse(D2D1::Ellipse(kHome, 10.5f, 10.5f), brush_.Get(), 1.6f);
-        rt->SetTransform(D2D1::Matrix3x2F::Scale(11, 11) * D2D1::Matrix3x2F::Translation(kHome.x, kHome.y) *
-                         mat(base));
-        brush_->SetColor(pressed ? col(kInk) : col(kLabel));
-        rt->FillGeometry(house_.Get(), brush_.Get());
-        rt->SetTransform(base);
-        if (em > 0.0f) {
-            brush_->SetColor(col(kAmber, em));
-            rt->DrawEllipse(D2D1::Ellipse(kHome, 16.5f, 16.5f), brush_.Get(), 2.0f);
+    for (int side=0;side<2;++side) {
+        const int inputs[]={in(side?SwitchInput::R:SwitchInput::L),in(side?SwitchInput::ZR:SwitchInput::ZL)};
+        ID2D1PathGeometry* shapes[]={shoulder_[side].Get(),trigger_[side].Get()};
+        for (int i=0;i<2;++i) {
+            const bool pressed=(s.active>>inputs[i])&1u;
+            const float em=emphasis(inputs[i],s),travel=i?(side?s.rt:s.lt):0;
+            if (pressed || travel>0) { brush_->SetColor(color(kAmber,pressed?0.55f:travel*0.5f)); rt->FillGeometry(shapes[i],brush_.Get()); }
+            if (pressed || em>0) { brush_->SetColor(color(kAmber,pressed?1:em)); rt->DrawGeometry(shapes[i],brush_.Get(),2); }
         }
     }
-
-    rt->SetTransform(old);
-}
-
-int JoyConArt::hit_test(float px, float py) const
-{
-    if (fit_.scale <= 0) return -1;
-    const D2D1_POINT_2F p = {(px - fit_.ox) / fit_.scale, (py - fit_.oy) / fit_.scale};
-
-    struct Circle {
-        D2D1_POINT_2F c;
-        float r;
-        SwitchInput s;
-    };
-    const Circle circles[] = {
-        {offset(kFace, 0, -kFaceD), kFaceR + 3, SwitchInput::X},
-        {offset(kFace, 0, kFaceD), kFaceR + 3, SwitchInput::B},
-        {offset(kFace, -kFaceD, 0), kFaceR + 3, SwitchInput::Y},
-        {offset(kFace, kFaceD, 0), kFaceR + 3, SwitchInput::A},
-        {offset(kDpad, 0, -kFaceD), kFaceR + 3, SwitchInput::DpadUp},
-        {offset(kDpad, 0, kFaceD), kFaceR + 3, SwitchInput::DpadDown},
-        {offset(kDpad, -kFaceD, 0), kFaceR + 3, SwitchInput::DpadLeft},
-        {offset(kDpad, kFaceD, 0), kFaceR + 3, SwitchInput::DpadRight},
-        {kMinus, 14, SwitchInput::Minus},
-        {kPlus, 14, SwitchInput::Plus},
-        {kCapture, 15, SwitchInput::Capture},
-        {kHome, 16, SwitchInput::Home},
-    };
-    for (const auto& c : circles)
-        if (dist(p, c.c) <= c.r) return in(c.s);
-
-    // Sticks: the cap clicks the stick, the ring around it picks a direction.
-    const struct {
-        D2D1_POINT_2F c;
-        SwitchInput click, up;
-    } sticks[] = {{kLStick, SwitchInput::LStickClick, SwitchInput::LStickUp},
-                  {kRStick, SwitchInput::RStickClick, SwitchInput::RStickUp}};
-    for (const auto& st : sticks) {
-        const float d = dist(p, st.c);
-        if (d > kChevronR + 9) continue;
-        if (d <= kCapR * 0.75f) return in(st.click);
-        const float dx = p.x - st.c.x, dy = p.y - st.c.y;
-        int dir;  // up, down, left, right
-        if (std::fabs(dx) > std::fabs(dy)) dir = dx > 0 ? 3 : 2;
-        else dir = dy < 0 ? 0 : 1;
-        return in(st.up) + dir;
+    const D2D1_POINT_2F centers[]={kLeftStick,kRightStick};
+    const int clicks[]={in(SwitchInput::LStickClick),in(SwitchInput::RStickClick)};
+    const int directions[]={in(SwitchInput::LStickUp),in(SwitchInput::RStickUp)};
+    for (int side=0;side<2;++side) {
+        const auto c=centers[side];
+        const float x=std::clamp(side?s.rx:s.lx,-1.0f,1.0f),y=std::clamp(side?s.ry:s.ly,-1.0f,1.0f);
+        const bool pressed=(s.active>>clicks[side])&1u;
+        const float em=emphasis(clicks[side],s);
+        if (std::fabs(x)>0.01f || std::fabs(y)>0.01f || pressed) {
+            brush_->SetColor(color(0x41474A)); rt->FillEllipse(D2D1::Ellipse(c,31,31),brush_.Get());
+            const auto cap=D2D1::Point2F(c.x+x*8,c.y-y*8);
+            brush_->SetColor(color(pressed?kAmber:0x41474A)); rt->FillEllipse(D2D1::Ellipse(cap,22,22),brush_.Get());
+            brush_->SetColor(color(0x14171A)); rt->DrawEllipse(D2D1::Ellipse(cap,22,22),brush_.Get(),1);
+        }
+        if (pressed || em>0) { brush_->SetColor(color(kAmber,pressed?1:em)); rt->DrawEllipse(D2D1::Ellipse(c,34,34),brush_.Get(),2); }
+        const D2D1_POINT_2F delta[]={{0,-42},{0,42},{-42,0},{42,0}};
+        for (int d=0;d<4;++d) {
+            const int input=directions[side]+d;
+            const bool on=(s.active>>input)&1u;
+            const float e=emphasis(input,s);
+            if (!on && e<=0) continue;
+            brush_->SetColor(color(kAmber,on?1:e));
+            rt->FillEllipse(D2D1::Ellipse({c.x+delta[d].x,c.y+delta[d].y},4,4),brush_.Get());
+        }
     }
-
-    const struct {
-        ID2D1PathGeometry* g;
-        SwitchInput s;
-    } shapes[] = {{shoulder_[0].Get(), SwitchInput::L},
-                  {shoulder_[1].Get(), SwitchInput::R},
-                  {trigger_[0].Get(), SwitchInput::ZL},
-                  {trigger_[1].Get(), SwitchInput::ZR}};
-    for (const auto& sh : shapes) {
-        BOOL inside = FALSE;
-        if (sh.g && SUCCEEDED(sh.g->FillContainsPoint(p, nullptr, 2.0f, &inside)) && inside) return in(sh.s);
+    rt->SetTransform(previous);
+}
+int JoyConArt::hit_test(float x,float y) const
+{
+    if (scale_<=0) return -1;
+    const D2D1_POINT_2F p{(x-ox_)/scale_,(y-oy_)/scale_};
+    for (const auto& c:kControls) if (distance(p,c.center)<=c.radius+3) return in(c.input);
+    const D2D1_POINT_2F centers[]={kLeftStick,kRightStick};
+    const SwitchInput clicks[]={SwitchInput::LStickClick,SwitchInput::RStickClick};
+    const SwitchInput dirs[]={SwitchInput::LStickUp,SwitchInput::RStickUp};
+    for (int side=0;side<2;++side) {
+        const float d=distance(p,centers[side]);
+        if (d>49) continue;
+        if (d<=22) return in(clicks[side]);
+        const float dx=p.x-centers[side].x,dy=p.y-centers[side].y;
+        return in(dirs[side])+(std::fabs(dx)>std::fabs(dy)?(dx>0?3:2):(dy<0?0:1));
+    }
+    for (int side=0;side<2;++side) {
+        BOOL inside=FALSE;
+        if (SUCCEEDED(shoulder_[side]->FillContainsPoint(p,nullptr,0.25f,&inside)) && inside) return in(side?SwitchInput::R:SwitchInput::L);
+        if (SUCCEEDED(trigger_[side]->FillContainsPoint(p,nullptr,0.25f,&inside)) && inside) return in(side?SwitchInput::ZR:SwitchInput::ZL);
     }
     return -1;
 }
-
-}  // namespace hikari::joycon
+}
