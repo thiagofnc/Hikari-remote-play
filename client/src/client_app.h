@@ -21,6 +21,8 @@
 namespace hikari {
 
 struct ClientHooks {
+    // Offline UI preview; empty during normal remote play.
+    std::string preview;
     // Opens the app's Settings window (modal). Returns true if settings changed.
     std::function<bool(HWND parent)> open_settings;
 };
@@ -54,6 +56,7 @@ private:
 
     void load_settings();
     void connect();
+    void preview_state(const std::string& state);
     void render_thread();
     void draw_lobby(ui::Painter& p, const ui::Rect& r);
     void draw_stream_overlay(ui::Painter& p, const ui::Rect& r);

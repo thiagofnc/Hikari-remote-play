@@ -102,10 +102,35 @@ void ClientApp::load_settings()
 
 void ClientApp::connect()
 {
+    if (!hooks_.preview.empty()) return;
     const std::string host = cfg_->get("client", "host");
     if (host.empty()) return;
     net_.connect(host, cfg_->get("client", "pairing_code"), preset_,
                  static_cast<uint32_t>(cfg_->get_int("client", "max_kbps", 0)));
+}
+
+void ClientApp::preview_state(const std::string& state)
+{
+    std::lock_guard<std::mutex> lk(mu_);
+    status_ = {};
+    have_status_ = true;
+    std::snprintf(status_.host_name, sizeof(status_.host_name), "Living room");
+    status_.console = state == "asleep" ? ConsoleState::Asleep : ConsoleState::Ready;
+    status_.bridge_ok = status_.capture_ok = status_.encoder_ok = 1;
+    status_.signal_ok = state != "asleep";
+    status_.wake_methods = 3;
+    if (state == "waking") {
+        status_.console = ConsoleState::Waking;
+        status_.phase = SessionPhase::WaitingForVideo;
+        std::snprintf(status_.message, sizeof(status_.message), "Waiting for the Switch's picture");
+    } else if (state == "failed") {
+        status_.console = ConsoleState::AwakeNoVideo;
+        status_.phase = SessionPhase::Failed;
+        status_.issue = proto::HostIssue::NoSignal;
+        std::snprintf(status_.message, sizeof(status_.message), "No HDMI signal. Check the dock and HDMI cable, then try again.");
+    }
+    screen_ = state == "stream" ? Screen::Stream : Screen::Lobby;
+    show_stats_ = state == "stream";
 }
 
 int ClientApp::run(Config& cfg, ClientHooks hooks)
@@ -134,9 +159,10 @@ int ClientApp::run(Config& cfg, ClientHooks hooks)
     const int w = MulDiv(1280, dpi, 96), h = MulDiv(780, dpi, 96);
     RECT wa;
     SystemParametersInfoW(SPI_GETWORKAREA, 0, &wa, 0);
-    hwnd_ = CreateWindowExW(0, wc.lpszClassName, L"Hikari", WS_OVERLAPPEDWINDOW, wa.left + (wa.right - wa.left - w) / 2,
+    hwnd_ = CreateWindowExW(0, wc.lpszClassName, hooks_.preview.empty() ? L"Hikari" : L"Hikari - Offline preview", WS_OVERLAPPEDWINDOW, wa.left + (wa.right - wa.left - w) / 2,
                             wa.top + (wa.bottom - wa.top - h) / 2, w, h, nullptr, nullptr, wc.hInstance, this);
     if (!hwnd_) return 1;
+    if (!hooks_.preview.empty()) SetWindowTextW(hwnd_, widen("Hikari - Preview: " + hooks_.preview).c_str());
     // Dark title bar to match the UI.
     const BOOL dark = TRUE;
     using SetAttr = HRESULT(WINAPI*)(HWND, DWORD, LPCVOID, DWORD);
@@ -146,6 +172,7 @@ int ClientApp::run(Config& cfg, ClientHooks hooks)
 
     load_settings();
 
+    if (hooks_.preview.empty()) {
     ClientNetEvents ev;
     ev.state = [this](ConnState s, const std::string&) {
         if (s != ConnState::Connected && screen_ == Screen::Stream) toast("Connection lost - reconnecting...", 2.0);
@@ -185,10 +212,12 @@ int ClientApp::run(Config& cfg, ClientHooks hooks)
                      }
                  });
     audio_.start(audio_ms_for(preset_));
+    }
 
     if (cfg.get_bool("client", "fullscreen", false)) toggle_fullscreen();
     ShowWindow(hwnd_, SW_SHOW);
     show_stats_ = cfg.get_bool("client", "stats_overlay", false);
+    if (!hooks_.preview.empty()) preview_state(hooks_.preview);
 
     running_ = true;
     render_ = std::thread(&ClientApp::render_thread, this);
@@ -208,7 +237,7 @@ int ClientApp::run(Config& cfg, ClientHooks hooks)
     audio_.stop();
     cfg.set_bool("client", "fullscreen", fullscreen_);
     cfg.set_bool("client", "stats_overlay", show_stats_);
-    cfg.save();
+    if (hooks_.preview.empty()) cfg.save();
     return 0;
 }
 
@@ -239,6 +268,10 @@ void ClientApp::update_sending()
 
 void ClientApp::do_action(int action)
 {
+    if (!hooks_.preview.empty()) {
+        if (action == kActPlay || action == kActRetry) { preview_state("stream"); return; }
+        if (action == kActStop) { preview_state("ready"); return; }
+    }
     switch (action) {
     case kActPlay:
     case kActRetry:
@@ -563,7 +596,7 @@ void ClientApp::render_thread()
             std::lock_guard<std::mutex> lk(mu_);
             toast_until = toast_until_;
         }
-        const bool overlay_live = show_stats_ || now_s() < toast_until || net_.state() != ConnState::Connected;
+        const bool overlay_live = !hooks_.preview.empty() || show_stats_ || now_s() < toast_until || net_.state() != ConnState::Connected;
 
         if (streaming) {
             if (fresh || (overlay_live && now - last_render > 50'000)) {
@@ -626,7 +659,7 @@ void ClientApp::draw_lobby(ui::Painter& p, const Rect& r)
 {
     std::lock_guard<std::mutex> lk(mu_);
     ui_.begin_frame();
-    const ConnState conn = net_.state();
+    const ConnState conn = hooks_.preview.empty() ? net_.state() : ConnState::Connected;
     const bool connected = conn == ConnState::Connected;
     const proto::HostStatus st = status_;
     const bool have = have_status_ && connected;
@@ -650,6 +683,8 @@ void ClientApp::draw_lobby(ui::Painter& p, const Rect& r)
     default: conn_label = "Connecting to " + host_label_; break;
     }
     p.pill(r.r - pad, p.s(28), conn_label, conn_color, true);
+    if (!hooks_.preview.empty())
+        p.text("OFFLINE PREVIEW - sample host state", {pad, p.s(67), r.r - pad, p.s(91)}, p.s(12), ui::rgb(th::kAccent));
 
     // Hero: the console.
     const float cw = std::min(p.s(380), r.w() * 0.42f);
@@ -767,6 +802,11 @@ void ClientApp::draw_lobby(ui::Painter& p, const Rect& r)
 
 void ClientApp::draw_stream_overlay(ui::Painter& p, const Rect& r)
 {
+    if (!hooks_.preview.empty()) {
+        p.background(r);
+        p.text("Stream preview", {0, r.cy() - p.s(38), r.r, r.cy()}, p.s(30), ui::rgb(th::kText), Weight::SemiBold, Align::Center);
+        p.text("No live video - connect a host to see your game", {0, r.cy() + p.s(8), r.r, r.cy() + p.s(38)}, p.s(15), ui::rgb(th::kText2), Weight::Regular, Align::Center);
+    }
     std::string toast;
     double until;
     {
@@ -776,7 +816,7 @@ void ClientApp::draw_stream_overlay(ui::Painter& p, const Rect& r)
     }
     if (show_stats_) draw_stats(p, r);
 
-    if (net_.state() != ConnState::Connected) {
+    if (hooks_.preview.empty() && net_.state() != ConnState::Connected) {
         p.fill(r, ui::rgb(0x000000, 0.55f));
         p.spinner(r.cx(), r.cy() - p.s(20), p.s(22), ui::rgb(th::kAccent));
         p.text("Reconnecting...", Rect{r.l, r.cy() + p.s(16), r.r, r.cy() + p.s(46)}, p.s(18), ui::rgb(th::kText),

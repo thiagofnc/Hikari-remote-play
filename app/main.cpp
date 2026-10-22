@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "client_app.h"
+#include "controller_settings.h"
 #include "d2d_window.h"
 #include "host_app.h"
 #include "hikari/crypto.h"
@@ -42,14 +43,17 @@ private:
 class ClientSettings final : public D2DWindow {
 public:
     explicit ClientSettings(Config& cfg) : cfg_(cfg) {}
-    bool open(HWND owner)
+    bool open(HWND owner, bool discover = true)
     {
         if (!create(L"Hikari - Connect to your host", 620, 560, owner)) return false;
         host_ = add_edit(cfg_.get("client", "host"));
         code_ = add_edit(cfg_.get("client", "pairing_code"), true, true);
-        ClientNetEvents events;
-        discovery_.start(std::move(events));
-        discovery_.set_discovery(true);
+        offline_ = !discover;
+        if (discover) {
+            ClientNetEvents events;
+            discovery_.start(std::move(events));
+            discovery_.set_discovery(true);
+        }
         return true;
     }
     bool saved = false;
@@ -72,7 +76,7 @@ private:
         p.text("Hosts on your network", {x, p.s(304), right, p.s(330)}, p.s(14), ui::rgb(th::kText2));
         hosts_ = discovery_.discovered();
         if (hosts_.empty())
-            p.text("Searching... You can also enter an address above.", {x, p.s(338), right, p.s(374)}, p.s(13), ui::rgb(th::kText2));
+            p.text(offline_ ? "Offline preview - discovery is disabled." : "Searching... You can also enter an address above.", {x, p.s(338), right, p.s(374)}, p.s(13), ui::rgb(th::kText2));
         for (size_t i = 0; i < std::min<size_t>(hosts_.size(), 2); ++i) {
             const float y = p.s(338 + 42 * float(i));
             p.button(ui_, 100 + int(i), {x, y, right, y + p.s(36)}, hosts_[i].name + "  " + hosts_[i].address);
@@ -110,6 +114,7 @@ private:
     ClientNet discovery_;
     std::vector<DiscoveredHost> hosts_;
     std::string error_;
+    bool offline_ = false;
 };
 
 bool client_settings(HWND owner, Config& cfg)
@@ -122,7 +127,7 @@ bool client_settings(HWND owner, Config& cfg)
 
 class HostWindow final : public D2DWindow {
 public:
-    explicit HostWindow(HostApp& host) : host_(host) {}
+    explicit HostWindow(HostApp& host, bool preview = false) : host_(host), preview_(preview) {}
     ~HostWindow() override { if (tray_.hWnd) Shell_NotifyIconW(NIM_DELETE, &tray_); }
     void add_tray()
     {
@@ -139,7 +144,18 @@ private:
     void draw(ui::Painter& p, const Rect& r) override
     {
         p.background(r);
-        const HostSnapshot s = host_.snapshot();
+        HostSnapshot s;
+        if (preview_) {
+            s.host_name = "Living room - Offline preview";
+            s.pairing_code = "DEMO-CODE-ONLY";
+            s.addresses = {{"192.0.2.10", "Sample LAN", false}};
+            s.bridge_ok = s.capture_ok = s.audio_ok = s.encoder_ok = true;
+            s.bridge_port = "ESP32-S3 controller bridge";
+            s.capture_name = "HDMI capture - 1920 x 1080 at 60 fps";
+            s.audio_name = "Capture card HDMI audio";
+            s.encoder_name = "Hardware H.264 encoder";
+            s.message = "Sample device status. No hardware or network connection is active.";
+        } else s = host_.snapshot();
         const float x = p.s(30), right = r.r - x;
         p.text("Hikari Host", {x, p.s(22), right, p.s(62)}, p.s(28), ui::rgb(th::kText), ui::Weight::SemiBold);
         p.text(s.host_name, {x, p.s(66), right, p.s(94)}, p.s(15), ui::rgb(th::kText2));
@@ -175,6 +191,7 @@ private:
     }
     void on_action(int id) override
     {
+        if (preview_) return;
         if (id == 1) host_.wake_console();
         if (id == 2) host_.redetect_devices();
         if (id == 3 && MessageBoxW(hwnd(), L"Replace the pairing code? Clients will need the new code to reconnect.", L"Hikari", MB_YESNO | MB_ICONQUESTION) == IDYES)
@@ -214,13 +231,72 @@ private:
     HostApp& host_;
     NOTIFYICONDATAW tray_{};
     bool have_tray_ = false;
+    bool preview_ = false;
 };
+
+int run_preview(const std::string& screen)
+{
+    Config cfg;
+    const std::string dir = app_data_dir() + "\\preview";
+    ensure_directory(dir);
+    cfg.load(dir + "\\hikari.ini");
+    cfg.set("client", "host", "192.0.2.10");
+    cfg.set("client", "host_name", "Living room");
+    cfg.set("client", "pairing_code", "DEMO-CODE-ONLY");
+    cfg.set_bool("client", "fullscreen", false);
+    if (screen == "setup") {
+        RoleWindow window;
+        if (!window.create(L"Hikari - Setup preview", 520, 440)) return 1;
+        window.run_modal();
+        return 0;
+    }
+    if (screen == "connection") {
+        ClientSettings window(cfg);
+        if (!window.open(nullptr, false)) return 1;
+        window.run_modal();
+        return 0;
+    }
+    if (screen == "host") {
+        HostApp host;
+        HostWindow window(host, true);
+        if (!window.create(L"Hikari - Host preview", 620, 720)) return 1;
+        window.run_modal();
+        return 0;
+    }
+    if (screen == "controller") {
+        InputMapping mapping = InputMapping::defaults_positional();
+        ControllerSettingsDeps deps;
+        deps.poll_pad = [] {
+            RawPadState pad;
+            pad.connected = true;
+            pad.device_name = "Xbox Wireless Controller (preview)";
+            return pad;
+        };
+        deps.list_devices = [] { return std::vector<std::string>{"Xbox Wireless Controller (preview)"}; };
+        show_controller_settings(nullptr, cfg, mapping, deps);
+        return 0;
+    }
+    if (screen != "ready" && screen != "asleep" && screen != "waking" && screen != "failed" && screen != "stream")
+        return 2;
+    ClientApp client;
+    ClientHooks hooks;
+    hooks.preview = screen;
+    hooks.open_settings = [&cfg](HWND owner) {
+        ClientSettings settings(cfg);
+        if (!settings.open(owner, false)) return false;
+        settings.run_modal();
+        return settings.saved;
+    };
+    return client.run(cfg, std::move(hooks));
+}
 
 int run(const std::vector<std::string>& args)
 {
     MediaRuntime media;
     if (!media.ok()) return 1;
     apply_process_performance_policy();
+    for (const auto& arg : args)
+        if (arg.rfind("--preview=", 0) == 0) return run_preview(arg.substr(10));
     Config cfg;
     cfg.load(app_data_dir() + "\\hikari.ini");
     std::string role = cfg.get("general", "role");

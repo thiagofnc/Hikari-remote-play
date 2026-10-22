@@ -20,3 +20,4 @@ results/
 # Packaging / CI caches
 /dist/
 /.deps/
+/artifacts/ui-review/
