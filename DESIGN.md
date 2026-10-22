@@ -1,19 +1,21 @@
 ---
 name: Hikari
-description: Refined native Windows remote-play workspaces in graphite and amber.
+description: Premium native Windows remote-play workspaces: near-black canvas, raised hairline cards and lit amber actions.
 colors:
-  graphite-bg: "#191A1D"
-  graphite-panel: "#202226"
-  control: "#282A2F"
-  control-hover: "#303339"
-  border: "#41444B"
-  text: "#F1F2F3"
-  text-secondary: "#B7BAC0"
-  text-muted: "#A0A4AC"
+  graphite-bg: "#0E0F11"
+  graphite-panel: "#16171A"
+  control: "#1E1F23"
+  control-hover: "#26282D"
+  border: "#2B2D33"
+  border-strong: "#3A3D44"
+  text: "#F3F4F6"
+  text-secondary: "#A8ACB4"
+  text-muted: "#80858E"
   amber: "#FBBB04"
   amber-hover: "#FFCB33"
+  amber-pressed: "#E2A600"
   on-amber: "#1A1400"
-  good: "#3DDC84"
+  good: "#3DD68C"
   warning: "#F5A524"
   error: "#FF5C5C"
   joycon-left: "#00B8D9"
@@ -44,11 +46,13 @@ typography:
     fontSize: "12px"
     fontWeight: 400
 rounded:
-  button: "6px"
+  button: "8px"
+  card: "12px"
   binding: "7px"
   controller-control: "8px"
   field: "8px"
   controller-panel: "12px"
+  pill: "12px"
 spacing:
   tight: "8px"
   control-gap: "16px"
@@ -96,6 +100,8 @@ components:
 ## Overview
 
 **Creative North Star: "A precise remote-play utility"**
+
+**Premium SaaS pass (2026-10-22, branch `ui/premium-saas`).** The user asked for a modern, very premium SaaS feel and chose the Linear-style refined direction: keep graphite and amber, deepen the canvas to near-black, raise working panes as hairline-bordered cards with a soft offset shadow, light primary actions with a vertical amber gradient and inner top highlight, and use tinted status chips, drawn status icons and keycaps. This supersedes the earlier "no cards" rule for working panes only; decorative glows, glass and breathing actions remain banned. Supplied assets are untouched. Before/after evidence for all fifteen offline previews: `artifacts/ui-review/premium-saas/{before,after}/*.png` and `artifacts/ui-review/premium-saas/index.html`.
 
 Hikari is a native C++ Windows application rendered with Win32, Direct2D and DirectWrite. Its matte graphite surfaces, restrained Hikari amber and compact Windows controls put connection state and useful actions first. The user selected the controller settings screen as the reference and requested a refined SaaS product feel for the other menus. The built result carries that same measured title/subtitle hierarchy, compact split workspaces and consistent actions across setup, connection, host and lobby while retaining the native Windows stack.
 
@@ -154,7 +160,7 @@ Non-wrapping text trims with a character ellipsis. Messages that need multiple l
 
 Dimensions are logical DIPs, scaled through the shared painter or a DPI-aware controller render target. Retain ordinary Windows frames and resize behavior. There is no web breakpoint or mobile layout.
 
-Setup, connection and host client sizes are 680 by 454, 600 by 568 and 900 by 688 DIP respectively. Their headers pair the supplied 24 DIP Hikari mark with a 22 DIP title and 13 DIP supporting line, followed by a thin divider at 100 DIP. Setup uses two full-width role rows with 17 DIP names, a stacked-server icon for Host, a display icon for Client, and directional arrows. Host uses a continuous split workspace with a thin vertical divider instead of enclosing panels. Connection uses a single-column address and pairing-code form without nearby discovery, keeps Tailscale setup below the fields and anchors Cancel and Save and connect below a footer rule. Host device rows use a 78 DIP pitch and align readiness at the right. Footer actions remain separate from device and pairing information.
+Setup, connection and host client sizes are 680 by 400, 600 by 540 and 900 by 688 DIP respectively. Their headers pair the supplied 24 DIP Hikari mark with a 22 DIP title and 13 DIP supporting line, followed by a thin divider at 100 DIP. Setup uses two full-width role rows with 17 DIP names, a stacked-server icon for Host, a display icon for Client, and directional arrows. Host uses a continuous split workspace with a thin vertical divider instead of enclosing panels. Connection uses a single-column address and pairing-code form without nearby discovery, keeps Tailscale setup below the fields and anchors Cancel and Save and connect below a footer rule. Host device rows use a 78 DIP pitch and align readiness at the right. Footer actions remain separate from device and pairing information.
 
 The client lobby opens at 1120 by 700 physical window units scaled by DPI, with the existing 860 by 600 compact preview. It uses a 24 DIP margin, supplied logo, 22 DIP title and compact upper-right actions. Change role is a quiet text action; Controller and Connection retain their existing behavior. Only the console session has an inset graphite surface, with 8 DIP corners and a 220 DIP height. Stream preferences sit directly on the window canvas; a thin vertical divider separates the host column. Four readiness rows have a 48 DIP pitch and display their status in a right-aligned column. Play remains 164 by 38 DIP. The left workspace uses 62% of the available width. Preset rows show descriptions when their pitch is at least 48 DIP and collapse to one line below that. The footer identifies offline sample data.
 
@@ -166,13 +172,15 @@ Controller settings default to 1200 by 760 DIP, with a minimum of 1040 by 700 DI
 
 ## Elevation & Depth
 
-The ordinary canvas and working panes use flat tonal separation and thin strokes, without background gradients or decorative glows. Rounded controller panes are functional groupings. Dropdown popups and dialogs are actual overlay layers: their native shadow helper draws four black rounded rectangles, expanded by 3, 6, 9 and 12 DIP and offset down by 6 DIP. Popup strength is 0.35; dialog strength is 0.5, divided evenly among those layers. Dialogs additionally dim the canvas with 55% black. Keyboard keycaps have a small 2 DIP dark lower edge. Do not turn these structural exceptions into floating dashboard cards.
+Three tonal levels carry depth: the `#0E0F11` canvas, `#16171A` raised cards and footer bars, and `#1E1F23` controls and fields. Working panes are cards (`Painter::card`, mirrored by `SettingsWindow::card`): 12 DIP corners, a 6.5% white hairline, a 3.5% white top highlight and a soft downward shadow built from six stacked translucent layers (each expanded by 1.6 DIP and offset 2.7–6.2 DIP; strength 0.32). Window footers are flat `#16171A` bands with a hairline top rule; the lobby uses a 36 DIP status bar. The lobby console illustration sits on a recessed stage (canvas at 70%, 9 DIP corners). Popups and dialogs use the same shadow at higher strength; dialogs dim the canvas with 55% black.
 
-Streaming telemetry and toasts use translucent dark overlays to keep text readable over moving video; these are operational overlays rather than a glass material system.
+Windows 11 frames match the canvas: `ui::style_window` sets dark mode, rounded corners, a `#0E0F11` caption and a `#2B2D33` border through DWM.
+
+Streaming telemetry and toasts use translucent dark overlays with a hairline, to keep text readable over moving video; these are operational overlays rather than a glass material system.
 
 ## Shapes
 
-Shared buttons and connection fields use softly squared 6 DIP corners. Setup, connection and host menus use rows and divider rules instead of enclosing panes. The lobby console session uses 8 DIP corners. Controller buttons/dropdowns use 8 DIP, bindings 7 DIP and functional panes 12 DIP. Controller popups use 10 DIP and dialogs 14 DIP. Small status badges and switch tracks retain their task-specific rounded silhouettes. Standard control boundaries are 1 DIP. Do not impose one global radius on the two existing native renderers.
+Shared buttons and connection fields use 8 DIP corners; cards 12 DIP; status chips are fully rounded. Setup groups its two roles in one card with a hairline divider; connection and host group related content in cards above a footer bar. The lobby console session uses 8 DIP corners. Controller buttons/dropdowns use 8 DIP, bindings 7 DIP and functional panes 12 DIP. Controller popups use 10 DIP and dialogs 14 DIP. Small status badges and switch tracks retain their task-specific rounded silhouettes. Standard control boundaries are 1 DIP. Do not impose one global radius on the two existing native renderers.
 
 ## Components
 
@@ -180,9 +188,7 @@ Shared buttons and connection fields use softly squared 6 DIP corners. Setup, co
 
 The shared hit list includes only enabled actions. Lobby focus persists across repaint, advances with Tab/Shift+Tab and activates with Enter or Space. When session state replaces Play with Retry, connection setup or Cancel, focus is reconciled to an available action. Native Alt+Enter fullscreen behavior remains available.
 
-Shared primary buttons use amber with dark text; secondary buttons use control gray, a thin border and bright text. Ghost actions gain a 6% white hover fill. Shared buttons inset by 1 DIP while pressed and show a 2 DIP amber focus stroke 3 DIP outside their bounds. Disabled shared fill and text opacity multiply by 0.4. Text is centered, semibold and 14 DIP.
-
-Controller settings have an established local variant: 8 DIP corners and 13.5 DIP semibold text, primary ink `#1E2127`, hover `#FFC933`, and pressed `#E0A800`. Preserve this difference when extending that renderer; it is not a new global theme. Danger actions use red text and restrained tinted states.
+Primary buttons are lit amber: a `#FFC52A` to `#FBBB04` vertical gradient (hover `#FFD452` to `#FFC21A`), a 38% white inner top highlight, a 22% black hairline and a soft shadow; pressed flattens to `#E2A600` and drops the label 1 DIP. Secondary buttons use a `#25272C` to `#1F2024` gradient, a `#3A3D44` outline and a 5% white top highlight. Ghost actions gain a 5% white hover fill. Focus is a 1.5 DIP amber stroke at 55% opacity, 3 DIP outside the bounds. Disabled opacity multiplies by 0.4. Labels are centered, 13.5 DIP semibold. Controller settings implement the same recipe locally. Danger actions use red text on a restrained red tint with a red hairline.
 
 ### Inputs / Fields
 
@@ -192,9 +198,9 @@ Connection fields are native Win32 edit controls placed inside 40 DIP Direct2D s
 
 Gamepad/Keyboard are functional segmented tabs: selected gray fill, semibold text and a short amber underline. The lobby's stream preferences use amber radio markers and a gray selected-row surface; compact rows keep a single-line name. Neither pattern implies a sidebar or global app navigation shell.
 
-### Status Badges
+### Status Badges, Icons and Keycaps
 
-Shared status badges are 26 DIP tall, their width is measured text plus 36 DIP, with a colored dot and text; controller status badges use a 28 DIP allocation and subtle semantic tint. Text explains the state so color is supplementary.
+Status chips are 24 DIP, fully rounded, tinted 11% with a 30% hairline of their semantic color, a 3 DIP dot and 12 DIP medium text. Readiness rows pair a drawn status icon (check in a green tinted circle, exclamation in amber, dotted ring while waiting) with a right-aligned text state, so color is never the only signal. Keycaps (`Painter::keycap`) mark real shortcuts: "Or press A on your controller" and the lobby status bar's F11 Full screen. Pairing codes and addresses render in Cascadia Mono (Consolas fallback) because they are data.
 
 ### Lobby Console Illustration
 
@@ -233,7 +239,7 @@ Offline previews `controller-switch2` and `controller-switch2-compact` select th
 
 ### Don't:
 
-- **Don't** add decorative background glows, glass panels, breathing primary actions or dashboard cards.
+- **Don't** add decorative background glows, glass panels or breathing primary actions. Cards hold working content only; never nest cards or use them as icon-heading-text tiles.
 - **Don't** replace this Win32/Direct2D implementation with web or mobile conventions.
 - **Don't** infer live hardware readiness or latency measurements from offline preview screens.
 - **Don't** promote local renderer differences or tiny functional captions into new global visual rules.
