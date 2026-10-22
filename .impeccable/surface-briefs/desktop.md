@@ -10,7 +10,7 @@ OWN-WORLD: User-approved matte graphite, restrained Hikari amber, Segoe UI, comp
 
 STORY: Choose this PC's role, pair the host, understand the console's state, play. Controller settings expose mappings alongside the real diagram; clicking a control identifies its binding.
 
-FIRST VIEWPORT: Compact brand/status bar; left-aligned host and action area; console on the right; bottom preset/settings toolbar. Setup/pairing have left-aligned titles and meaningful action groups. Mappings and original controller front/top views align to one toolbar/footer rhythm. Exact control highlights convey input feedback without decoration.
+FIRST VIEWPORT: User rejected the sparse first-round setup, pairing, lobby and host surfaces; preserve the controller screen as the visual authority. Reuse its 24 DIP margin, 22 DIP title, supporting line, 12 DIP functional panes, 16 DIP gaps and compact actions. Lobby puts session and stream preference together with a host-readiness pane. Pairing puts form fields beside nearby hosts. Host puts devices beside pairing details. Setup presents two role choices in one measured workspace. Mappings and original controller front/top views align to one toolbar/footer rhythm. Exact control highlights convey input feedback without decoration.
 
 FORM: User-pinned direction confirmed in conversation overrides assignment. Code-led native app. seed:31b8d774e5c48128. Signature: diagram-to-binding selection and live input feedback; motion only for state.
 

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-22T02:29:24.501439+00:00",
+  "generatedAt": "2026-10-22T02:44:42.939690+00:00",
   "title": "Design System: Hikari",
   "extensions": {
     "colorMeta": {
@@ -231,8 +231,8 @@
     },
     "typographyMeta": {
       "headline": {
-        "displayName": "Lobby Headline",
-        "purpose": "Native device title; 96-DPI logical DIP values encoded as px in frontmatter."
+        "displayName": "Page Title",
+        "purpose": "Setup, connection, host and lobby title; native shared Text family at 22 DIP."
       },
       "title": {
         "displayName": "Controller Title",
@@ -277,7 +277,16 @@
       "snippets": "All HTML/CSS entries are illustrative translations for the design panel, never shipped UI source. Browser focus and active rules approximate native state visuals.",
       "tonalRamps": "Synthesized OKLCH panel metadata only; not implemented colors or normative application ramps.",
       "artwork": "assets/joycon-reference.png; original transparent pixels, runtime front/top source crops; provenance in adjacent .png.json.",
-      "driftNotCanonized": "Small uppercase functional captions, local control renderer differences and stale glow comments are observed, not repaired or promoted."
+      "driftNotCanonized": "Small uppercase functional controller captions and local renderer differences are observed, not repaired or promoted.",
+      "menuClientSizes": {
+        "setup": "680 x 454 DIP",
+        "connection": "760 x 568 DIP",
+        "host": "900 x 724 DIP"
+      },
+      "workspaceGrammar": "Controller-reference hierarchy: 24 DIP margins, 22 DIP page title, 13 DIP supporting line, 12 DIP functional panes, 16 DIP gaps.",
+      "lobby": "Session/stream preference left; host readiness right; real Controller/Connection header actions. Radio-choice rows omit descriptions below 48 DIP pitch.",
+      "keyboard": "Only enabled actions enter shared hit list. Lobby preserves focus, Tab/Shift+Tab advances, Enter/Space activates, and state changes reconcile removed actions.",
+      "evidence": "Latest app/main.cpp, client/src/client_app.cpp, ui/ui_kit.cpp; after/01?06,08,13 captures; controller 09 unchanged."
     }
   },
   "components": [
@@ -311,7 +320,7 @@
       "refersTo": "connection-field",
       "description": "Illustrative translation only; application field is a Win32 EDIT with a painted surround.",
       "html": "<input class=\"ds-field\" aria-label=\"Host address\" value=\"192.0.2.10\">",
-      "css": ".ds-field{font-family:'Segoe UI Variable Text','Segoe UI',sans-serif;font-size:14px;height:44px;padding:0 12px;background:#282A2F;color:#F1F2F3;border:1px solid #41444B;border-radius:6px;} .ds-field:hover{border-color:#A0A4AC;} .ds-field:focus-visible{outline:none;border-color:#FBBB04;}"
+      "css": ".ds-field{font-family:'Segoe UI Variable Text','Segoe UI',sans-serif;font-size:14px;height:40px;padding:0 12px;background:#282A2F;color:#F1F2F3;border:1px solid #41444B;border-radius:8px;} .ds-field:hover{border-color:#A0A4AC;} .ds-field:focus-visible{outline:none;border-color:#FBBB04;}"
     },
     {
       "name": "Input Tabs",
@@ -325,7 +334,7 @@
       "kind": "chip",
       "description": "Illustrative translation of shared status pill; text supplements dot color.",
       "html": "<span class=\"ds-status\"><i></i>Connected</span>",
-      "css": ".ds-status{font-family:'Segoe UI Variable Text','Segoe UI',sans-serif;font-size:14px;display:inline-flex;align-items:center;gap:9px;height:26px;padding:0 8px 0 9px;border-radius:5px;background:#202226;color:#F1F2F3;font-size:12.5px;font-weight:500;} .ds-status i{width:8px;height:8px;border-radius:50%;background:#3DDC84;}"
+      "css": ".ds-status{font-family:'Segoe UI Variable Text','Segoe UI',sans-serif;font-size:14px;display:inline-flex;align-items:center;gap:9px;height:26px;padding:0 14px 0 9px;border-radius:5px;background:#202226;color:#F1F2F3;font-size:12.5px;font-weight:500;} .ds-status i{width:8px;height:8px;border-radius:50%;background:#3DDC84;}"
     },
     {
       "name": "Binding Target",
@@ -336,19 +345,26 @@
       "css": ".ds-binding{font-family:'Segoe UI Variable Text','Segoe UI',sans-serif;font-size:14px;font-size:13.5px;height:32px;padding:0 8px;border:1px solid #41444B;border-radius:7px;background:#282A2F;color:#F1F2F3;} .ds-binding:hover{background:#303339;border-color:#4A515C;} .ds-binding:focus-visible{outline:1.5px solid #FBBB04;outline-offset:-1.5px;} .ds-binding:active{background:rgba(251,187,4,.1);border-color:#FBBB04;}"
     },
     {
-      "name": "Functional Controller Pane",
+      "name": "Functional Workspace Pane",
       "kind": "card",
       "refersTo": "controller-panel",
-      "description": "Illustrative tonal container only; real controller panes contain mapping controls or the original artwork, not dashboard cards.",
+      "description": "Illustrative tonal container only; established by controller settings and reused for actual session, stream, host and pairing tasks. Not a decorative dashboard card.",
       "html": "<section class=\"ds-pane\">Controller mappings</section>",
       "css": ".ds-pane{font-family:'Segoe UI Variable Text','Segoe UI',sans-serif;font-size:14px;padding:18px;border-radius:12px;background:#202226;color:#F1F2F3;}"
+    },
+    {
+      "name": "Stream Preference",
+      "kind": "custom",
+      "description": "Illustrative translation of lobby radio-choice row. Native compact rows omit the description below 48 DIP pitch; no JavaScript behavior is included.",
+      "html": "<button class=\"ds-preference\" aria-pressed=\"true\"><i></i><span>Balanced<small>Balance responsiveness and picture quality.</small></span></button>",
+      "css": ".ds-preference{display:flex;align-items:center;gap:18px;min-height:60px;padding:4px 12px;background:#282A2F;color:#F1F2F3;border:1px solid #41444B;border-radius:6px;font-family:\"Segoe UI Variable Text\",\"Segoe UI\",sans-serif;text-align:left;font-size:13px;font-weight:500;} .ds-preference i{width:12px;height:12px;border:1px solid #FBBB04;border-radius:50%;position:relative;} .ds-preference i:after{content:\"\";position:absolute;inset:3px;background:#FBBB04;border-radius:50%;} .ds-preference small{display:block;color:#B7BAC0;font-size:12px;font-weight:400;margin-top:6px;} .ds-preference:hover{background:#303339;} .ds-preference:focus-visible{outline:2px solid #FBBB04;outline-offset:3px;} .ds-preference:active{transform:scale(.99);}"
     }
   ],
   "narrative": {
     "northStar": "A precise remote-play utility",
-    "overview": "Hikari is a native C++ Windows application rendered with Win32, Direct2D and DirectWrite. Its matte graphite surfaces, restrained Hikari amber and compact Windows controls put connection state and useful actions first. These are the user-approved materials, recorded from the built implementation rather than a web or mobile redesign.\n\nThe supplied Hikari logo and original transparent Joy-Con image carry the product identity. The controller diagram is an interactive mapping surface: selecting a real control identifies its binding, while precise amber overlays show capture and live input. Preview screens explicitly identify sample data.",
+    "overview": "Hikari is a native C++ Windows application rendered with Win32, Direct2D and DirectWrite. Its matte graphite surfaces, restrained Hikari amber and compact Windows controls put connection state and useful actions first. The user selected the controller settings screen as the reference and requested a refined SaaS product feel for the other menus. The built result carries that same measured title/subtitle hierarchy, functional panes and compact actions across setup, connection, host and lobby while retaining the native Windows stack.\n\nThe supplied Hikari logo and original transparent Joy-Con image carry the product identity. The controller diagram is an interactive mapping surface: selecting a real control identifies its binding, while precise amber overlays show capture and live input. Preview screens explicitly identify sample data.",
     "keyCharacteristics": [
-      "Compact native desktop controls and left-aligned information.",
+      "Controller-led workspace hierarchy, compact native desktop controls and left-aligned information.",
       "Flat graphite surfaces, thin boundaries and restrained amber state feedback.",
       "Original supplied artwork with preserved transparent pixels.",
       "Motion attached to progress, capture, input feedback and transient status."

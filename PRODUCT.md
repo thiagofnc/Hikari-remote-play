@@ -24,7 +24,7 @@ Preserve the native stack, input and streaming behavior, bounded queues, GPU pro
 
 ## Brand Commitments
 
-Keep the Hikari name and supplied logo. The user supplied `assets/joycon-reference.png` and requested its front-facing Joy-Cons and useful shoulder views in the interactive controller diagram. Preserve its actual pixels and transparent background. The user approved matte graphite surfaces, restrained amber accents, compact Windows-style controls, and no decorative glows or dashboard cards. They explicitly rejected a generic AI-generated appearance.
+Keep the Hikari name and supplied logo. The user supplied `assets/joycon-reference.png` and requested its front-facing Joy-Cons and useful shoulder views in the interactive controller diagram. Preserve its actual pixels and transparent background. The user approved matte graphite surfaces, restrained amber accents, compact Windows-style controls, and no decorative glows or dashboard cards. They explicitly rejected a generic AI-generated appearance. After reviewing the first redesign, they approved only the controller screen and requested the other menus feel like a refined SaaS product. Use the controller screen as the visual reference across the rest of the app.
 
 ## Evidence on Hand
 

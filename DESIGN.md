@@ -1,6 +1,6 @@
-﻿---
+---
 name: Hikari
-description: Compact native Windows remote-play controls in graphite and amber.
+description: Refined native Windows remote-play workspaces in graphite and amber.
 colors:
   graphite-bg: "#191A1D"
   graphite-panel: "#202226"
@@ -21,7 +21,7 @@ colors:
 typography:
   headline:
     fontFamily: "Segoe UI Variable Text, Segoe UI"
-    fontSize: "30px"
+    fontSize: "22px"
     fontWeight: 600
   title:
     fontFamily: "Segoe UI Variable Display, Segoe UI"
@@ -29,7 +29,7 @@ typography:
     fontWeight: 600
   body:
     fontFamily: "Segoe UI Variable Text, Segoe UI"
-    fontSize: "14px"
+    fontSize: "13px"
     fontWeight: 400
   controller-body:
     fontFamily: "Segoe UI Variable Text, Segoe UI"
@@ -47,14 +47,15 @@ rounded:
   button: "6px"
   binding: "7px"
   controller-control: "8px"
+  field: "8px"
   controller-panel: "12px"
 spacing:
   tight: "8px"
   control-gap: "16px"
   panel-inset: "18px"
   controller-margin: "24px"
-  dialog-margin: "30px"
-  lobby-margin: "40px"
+  page-margin: "24px"
+  pane-content-inset: "22px"
 components:
   button-primary:
     backgroundColor: "{colors.amber}"
@@ -77,8 +78,8 @@ components:
   connection-field:
     backgroundColor: "{colors.control}"
     textColor: "{colors.text}"
-    rounded: "{rounded.button}"
-    height: "44px"
+    rounded: "{rounded.field}"
+    height: "40px"
   binding:
     backgroundColor: "{colors.control}"
     textColor: "{colors.text}"
@@ -96,18 +97,18 @@ components:
 
 **Creative North Star: "A precise remote-play utility"**
 
-Hikari is a native C++ Windows application rendered with Win32, Direct2D and DirectWrite. Its matte graphite surfaces, restrained Hikari amber and compact Windows controls put connection state and useful actions first. These are the user-approved materials, recorded from the built implementation rather than a web or mobile redesign.
+Hikari is a native C++ Windows application rendered with Win32, Direct2D and DirectWrite. Its matte graphite surfaces, restrained Hikari amber and compact Windows controls put connection state and useful actions first. The user selected the controller settings screen as the reference and requested a refined SaaS product feel for the other menus. The built result carries that same measured title/subtitle hierarchy, functional panes and compact actions across setup, connection, host and lobby while retaining the native Windows stack.
 
 The supplied Hikari logo and original transparent Joy-Con image carry the product identity. The controller diagram is an interactive mapping surface: selecting a real control identifies its binding, while precise amber overlays show capture and live input. Preview screens explicitly identify sample data.
 
 **Key Characteristics:**
 
-- Compact native desktop controls and left-aligned information.
+- Controller-led workspace hierarchy, compact native desktop controls and left-aligned information.
 - Flat graphite surfaces, thin boundaries and restrained amber state feedback.
 - Original supplied artwork with preserved transparent pixels.
 - Motion attached to progress, capture, input feedback and transient status.
 
-Evidence: `ui/hikari/ui_kit.h`, `ui/ui_kit.cpp`, `client/src/controller_settings.cpp`, `client/src/joycon_art.cpp`, `client/src/client_app.cpp`, `app/main.cpp`; rendered review captures in `artifacts/ui-review/after`. Frontmatter `px` values represent logical Windows DIPs at 96 DPI, not physical pixels or a CSS implementation. DirectWrite keeps its native line metrics; no fixed line-height or letter-spacing scale is established.
+Evidence: `ui/hikari/ui_kit.h`, `ui/ui_kit.cpp`, `client/src/controller_settings.cpp`, `client/src/joycon_art.cpp`, `client/src/client_app.cpp`, `app/main.cpp`; rendered review captures in `artifacts/ui-review/after` (01?06 and 08 for refreshed menus, 13 for compact lobby, 09 for the unchanged controller reference). Frontmatter `px` values represent logical Windows DIPs at 96 DPI, not physical pixels or a CSS implementation. DirectWrite keeps its native line metrics; no fixed line-height or letter-spacing scale is established.
 
 ## Colors
 
@@ -115,7 +116,7 @@ The primary palette is warm amber against neutral graphite; device and semantic 
 
 ### Primary
 
-- **Hikari amber:** primary actions, selected preset underline, keyboard focus, capture progress and diagram overlays.
+- **Hikari amber:** primary actions, selected preset radio marker, keyboard focus, capture progress and diagram overlays.
 - **Amber hover / on-amber:** brighter shared-button hover and dark action text.
 
 ### Secondary
@@ -141,9 +142,10 @@ DirectWrite uses a single Windows text family relationship. Shared UI text is re
 
 ### Hierarchy
 
-- **Headline:** lobby device title at 30 DIP semibold; setup title at 28 DIP; connection and host titles at 24 DIP.
+- **Headline:** setup, connection, host and lobby page titles at 22 DIP semibold in the shared Text family.
+- **Section title:** pane titles at 15 DIP semibold; setup roles and lobby device title at 18 DIP semibold.
 - **Title:** controller settings at 22 DIP semibold; controller dialog title at 17 DIP.
-- **Body:** shared UI at 14 DIP; controller mappings at 13.5 DIP.
+- **Body:** shared page subtitles and main information at 13 DIP; shared button labels at 14 DIP; controller mappings at 13.5 DIP.
 - **Label:** shared hints and controller keys at 12 DIP; shared status pill at 12.5 DIP medium.
 
 Non-wrapping text trims with a character ellipsis. Messages that need multiple lines explicitly request wrapping. Controller toolbar and group captions currently use 11 DIP semibold uppercase; they are functional field/group labels, not a transferable eyebrow or display style.
@@ -152,7 +154,9 @@ Non-wrapping text trims with a character ellipsis. Messages that need multiple l
 
 Dimensions are logical DIPs, scaled through the shared painter or a DPI-aware controller render target. Retain ordinary Windows frames and resize behavior. There is no web breakpoint or mobile layout.
 
-Setup, connection and host windows use compact, left-aligned action groups. Their client sizes are 520 by 440, 620 by 560 and 620 by 720 respectively. The lobby uses a 40 DIP margin, a brand/status row and separator at 80 DIP, actions on the left, a device illustration on the right and a bottom toolbar. The main action is 180 by 44 DIP; preset and settings controls are 34 DIP tall.
+Setup, connection and host client sizes are 680 by 454, 760 by 568 and 900 by 724 DIP respectively. They share a 24 DIP outside margin, 22 DIP page title and 13 DIP supporting line. Functional panes use 12 DIP corners, 16 DIP gaps and approximately 22 DIP content insets. Setup presents Host and Client as equal side-by-side role choices. Connection places host details beside nearby hosts and anchors actions at the bottom. Host places connected-device checks beside pairing details. These compositions group actual tasks; they are not decorative dashboard cards.
+
+The lobby applies the same 24 DIP margin and page hierarchy. Real Controller and Connection actions sit at the upper right with 36 DIP height. Session state and stream preference occupy the left column; host connection and readiness checks occupy the right. Content starts at 100 DIP with a 16 DIP pane gap. The session pane is 220 DIP tall; Play is 164 by 38 DIP. The left/right division uses 62% of the usable width for the left workspace. Stream preference is a vertical radio-choice list with row pitch up to 64 DIP; below 48 DIP pitch, labels collapse to one line and descriptions are omitted. The footer identifies offline sample data. This compact behavior is measured inside the native window, not a web breakpoint.
 
 Controller settings default to 1200 by 760 DIP, with a minimum of 1040 by 700 DIP. Its margin is 24 DIP, toolbar controls are 36 DIP tall, and the content begins at 148 DIP. The binding pane width is clamped to 57% of the window between 600 and 800 DIP; a 16 DIP gap separates the artwork pane. The three mapping columns have 22 DIP gaps, adaptive row pitch clamped to 24–40 DIP and targets up to 32 DIP tall. The footer stays anchored with 38 DIP action buttons. These are native minimum-size constraints, not responsive stacking instructions.
 
@@ -166,11 +170,13 @@ Streaming telemetry and toasts use translucent dark overlays to keep text readab
 
 ## Shapes
 
-Shared buttons and connection field surrounds use softly squared 6 DIP corners. Controller buttons/dropdowns use 8 DIP, bindings 7 DIP and functional panes 12 DIP. Controller popups use 10 DIP and dialogs 14 DIP. Small status badges and switch tracks retain their task-specific rounded silhouettes. Standard control boundaries are 1 DIP. Do not impose one global radius on the two existing native renderers.
+Shared buttons use softly squared 6 DIP corners; connection field surrounds use 8 DIP corners. The refreshed setup, connection, host and lobby working panes use 12 DIP corners. Controller buttons/dropdowns use 8 DIP, bindings 7 DIP and functional panes 12 DIP. Controller popups use 10 DIP and dialogs 14 DIP. Small status badges and switch tracks retain their task-specific rounded silhouettes. Standard control boundaries are 1 DIP. Do not impose one global radius on the two existing native renderers.
 
 ## Components
 
 ### Buttons
+
+The shared hit list includes only enabled actions. Lobby focus persists across repaint, advances with Tab/Shift+Tab and activates with Enter or Space. When session state replaces Play with Retry, connection setup or Cancel, focus is reconciled to an available action. Native Alt+Enter fullscreen behavior remains available.
 
 Shared primary buttons use amber with dark text; secondary buttons use control gray, a thin border and bright text. Ghost actions gain a 6% white hover fill. Shared buttons inset by 1 DIP while pressed and show a 2 DIP amber focus stroke 3 DIP outside their bounds. Disabled shared fill and text opacity multiply by 0.4. Text is centered, semibold and 14 DIP.
 
@@ -178,15 +184,15 @@ Controller settings have an established local variant: 8 DIP corners and 13.5 DI
 
 ### Inputs / Fields
 
-Connection fields are native Win32 edit controls placed inside 44 DIP Direct2D surrounds. Their outline changes from border gray to amber when focused. Controller dropdowns use 12 DIP left text inset, a drawn chevron and an amber open outline; popup selection is marked with a small amber bar. Keep native editing semantics and shortcut behavior.
+Connection fields are native Win32 edit controls placed inside 40 DIP Direct2D surrounds with 8 DIP corners. Their outline changes from border gray to amber when focused. Controller dropdowns use 12 DIP left text inset, a drawn chevron and an amber open outline; popup selection is marked with a small amber bar. Keep native editing semantics and shortcut behavior.
 
 ### Navigation
 
-Gamepad/Keyboard are functional segmented tabs: selected gray fill, semibold text and a short amber underline. The lobby's stream presets use an amber underline for selection. Neither pattern implies a sidebar or global app navigation shell.
+Gamepad/Keyboard are functional segmented tabs: selected gray fill, semibold text and a short amber underline. The lobby's stream preferences use amber radio markers and a gray selected-row surface; compact rows keep a single-line name. Neither pattern implies a sidebar or global app navigation shell.
 
 ### Status Badges
 
-Shared status badges are 26 DIP tall with a colored dot and text; controller status badges use a 28 DIP allocation and subtle semantic tint. Text explains the state so color is supplementary.
+Shared status badges are 26 DIP tall, their width is measured text plus 36 DIP, with a colored dot and text; controller status badges use a 28 DIP allocation and subtle semantic tint. Text explains the state so color is supplementary.
 
 ### Binding Targets and Controller Artwork
 
