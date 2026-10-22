@@ -35,12 +35,21 @@ The Host screen runs an automatic checklist:
 | ✅ | Audio | The capture card's own audio input (same physical USB device) |
 | ✅ | Encoder | A one-time benchmark of every hardware encoder. The fastest by p95 latency wins. |
 
-Below the checklist the Host shows:
+Next to the checklist the Host shows:
 
-- **Pairing code**, e.g. `K7QM-2XPA-9TRB`. Clients need it once. You can generate a new one in Settings, which un-pairs every client.
-- **This PC's addresses**: LAN (e.g. `192.168.1.20`) and Tailscale (`100.x.y.z`, when its adapter is available). A configured MagicDNS name can also be entered on the client.
+- **Invite**, e.g. `hikari://living-room.tail1234.ts.net/K7QM-2XPA-9TRB?ip=100.101.102.103`. It holds everything a client needs: the host's Tailscale name, its Tailscale IP as a fallback, and the pairing code. Click **Copy invite** (also in the tray menu) and send it to yourself.
+- **Pairing code**, e.g. `K7QM-2XPA-9TRB`, if you prefer to type it. **New pairing code** takes effect immediately; other PCs then need the new invite.
+- **This PC on Tailscale**: its MagicDNS name and `100.x.y.z` address, plus the LAN address for play at home.
 
-Close the window to keep the host running in the **tray**. Click the tray icon to reopen the status window, or right-click it to quit. Automatic startup at login is not yet exposed in the app.
+**Always reachable** keeps the Switch available while you're away:
+
+| Row | What Hikari does |
+| --- | --- |
+| Windows Firewall | On first start Hikari asks once (a single administrator prompt) to add an inbound rule for UDP 47800. It also removes the *block* rules Windows creates when its "Allow access?" prompt is dismissed. **Allow** repeats this. |
+| Start with Windows | On by default: Hikari starts minimised to the tray when you sign in, so a reboot doesn't take your Switch offline. Windows still needs someone to sign in after a restart; enable automatic sign-in if the host PC restarts unattended. |
+| Lid closed | Laptops only. If closing the lid would sleep the PC, **Keep awake** sets the lid action to *Do nothing* (asks for administrator rights only if Windows requires them). |
+
+Close the window to keep the host running in the **tray**. Click the tray icon to reopen the status window, or right-click it to copy the invite or quit.
 
 ### On the Client (the PC where you play)
 
@@ -48,11 +57,15 @@ For remote play, click **Set up Tailscale** on the Host and **Install Tailscale*
 
 The Client shows its own Tailscale IPv4 address once its adapter is available. This confirms that an address is assigned; it does not verify that both PCs belong to the same Tailscale network or that the host is reachable.
 
-1. Enter the host's **Tailscale address** (e.g. `100.x.y.z`) or configured MagicDNS name (e.g. `living-room-pc`). The address is shown on the Host screen. This same saved destination works at home and away. For local-only play, a LAN address also works. Connection settings do not scan for nearby hosts.
-2. Enter the **pairing code** once. Dashes and letter case don't matter, and `O`/`0`, `I`/`L`/`1` are treated the same.
-3. Done. The client remembers the host and goes straight to the lobby next time.
+1. Paste the **invite** from the host into **Connect to your host**. The host address and pairing code fill in automatically. (Or type them: the host's Tailscale name or `100.x.y.z` address, and the pairing code. Dashes and letter case don't matter, and `O`/`0`, `I`/`L`/`1` are treated the same.)
+2. Click **Save and connect**. Hikari contacts the host and verifies the pairing code *before* saving, without interrupting anyone who is playing. If something is wrong you get a specific answer: wrong code, different Hikari version, address not found, or no answer (Hikari not running, Tailscale not signed in, or the host's firewall). If the host PC is simply off right now, **Save anyway** keeps the details.
+3. Done. The client remembers the host and goes straight to the lobby next time. If the Tailscale name ever stops resolving, the client automatically tries the IP from the invite.
 
-If you previously saved a LAN address, open Connection settings and replace it with the Tailscale address shown on the host. Leaving home does not automatically convert an existing LAN address into a Tailscale address.
+The same invite works at home and away. A LAN address also works for local-only play.
+
+Only one PC plays at a time. If another PC connects, the one that was playing returns to the lobby with **Another device took over**, and stays there until you press **Take over**.
+
+While connected, the lobby and stats overlay (F1) show the route Tailscale chose: **direct**, or **relayed** through a Tailscale DERP server. Relayed works, but adds latency; see [troubleshooting](troubleshooting.md#tailscale-relayed-derp-vs-direct).
 
 Tailscale supplies encryption and attempts direct connections, using its relay fallback when necessary. Relayed connections may have higher latency. See [Tailscale setup](https://tailscale.com/docs/install/windows) and its [current personal-use plans](https://tailscale.com/pricing). The host PC must remain awake with Hikari and Tailscale running.
 
@@ -146,8 +159,9 @@ How the client presents frames. Cycle it any time with <kbd>F2</kbd>:
 
 | Setting | Notes |
 | --- | --- |
-| Start with Windows | Planned; no automatic-startup toggle is available yet. |
-| Pairing code | Show or regenerate. Regenerating un-pairs all clients. |
+| Start with Windows | Toggle in **Always reachable**. On by default; starts minimised to the tray. |
+| Windows Firewall / Lid closed | Shown in **Always reachable** with a one-click fix when needed. |
+| Pairing code | Show, copy as an invite, or regenerate. A new code applies immediately and un-pairs all clients. |
 | Re-detect hardware | Re-runs capture, audio and encoder detection (e.g. after a driver update or new capture card). |
 | Audio codec | Opus when built with Opus support; otherwise PCM. Set `[host] audio_opus=false` in `hikari.ini` to prefer PCM. No codec selector is available yet. |
 

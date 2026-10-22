@@ -223,12 +223,12 @@ sequenceDiagram
 
 | Type | Name | Dir | Body | Notes |
 | --- | --- | --- | --- | --- |
-| 1 | `Hello` | C→H | 59 B | |
+| 1 | `Hello` | C→H | 59 / 60 B | Optional trailing `flags` byte. `kHelloProbe` (bit 0): verify the pairing only. The host answers with a `Welcome` whose `session_id` is 0 and leaves any active session alone (used by the client's Connect window). |
 | 2 | `Challenge` | H→C | 16 B | |
 | 3 | `Auth` | C→H | 64 B | |
-| 4 | `Welcome` | H→C | 104 B | |
+| 4 | `Welcome` | H→C | 104 / 136 B | Optional trailing 32-byte host display name. |
 | 5 | `Reject` | H→C | 1 B | |
-| 6 | `Bye` | both | — | Graceful disconnect. The host publishes a neutral pad. |
+| 6 | `Bye` | both | 0 / 1 B | Graceful disconnect; optional `reason`: 0 closed, 1 **replaced** (another client took over: the client stops reconnecting and asks before taking the host back), 2 timeout. The host publishes a neutral pad. |
 | 10 | `Input` | C→H | 27 / 39 B | |
 | 20 | `Video` | H→C | 26 B + ≤ 1168 B | |
 | 21 | `VideoParity` | H→C | 26 B + parity | |

@@ -102,10 +102,10 @@ XInput controllers (Xbox, most PC pads) work everywhere. DualShock 4 and DualSen
 
 | Cause | Fix |
 | --- | --- |
-| Firewall | On the **host**, allow inbound UDP 47800. In an elevated PowerShell: `New-NetFirewallRule -DisplayName "Hikari (UDP 47800)" -Direction Inbound -Protocol UDP -LocalPort 47800 -Action Allow` |
+| Firewall | On the **host**, check **Always reachable → Windows Firewall**; click **Allow** if it isn't green (one administrator prompt). Manual equivalent in an elevated PowerShell: `New-NetFirewallRule -DisplayName "Hikari (UDP 47800)" -Direction Inbound -Protocol UDP -LocalPort 47800 -Action Allow` |
 | Network marked *Public* | Windows blocks discovery on Public networks. Set the home network to *Private*, or add the rule above. |
 | Not on the same LAN | LAN discovery only finds hosts on the same subnet. Over the Internet, type the host's Tailscale name or `100.x` address. |
-| Wrong pairing code | The host rejects the handshake (`BadAuth` in `host.log`). Re-enter the code shown on the Host screen. `O`/`0` and `I`/`L`/`1` are treated the same, and dashes are optional. |
+| Wrong pairing code | The host rejects the handshake (`BadAuth` in `host.log`). On the host click **Copy invite** and paste it on the client; the Connect window verifies it before saving. |
 | Host busy | A host serves one client at a time (`Busy`). |
 
 ### Tailscale: relayed (DERP) vs. direct
@@ -169,7 +169,7 @@ See [remote-wake.md](remote-wake.md) for the full test procedure.
 
 ### The host stops working after a while
 
-Most likely the laptop went to sleep, or closing the lid suspended it. See [hardware setup → Prepare the Host PC](hardware-setup.md#3-prepare-the-host-pc). Hikari keeps the system awake while streaming, but it can't stop a lid-close action that is set to *Sleep*.
+Most likely the laptop went to sleep, or closing the lid suspended it. Hikari keeps the system awake while it runs; if the host window's **Always reachable → Lid closed** row isn't green, click **Keep awake**. After a reboot, Hikari only starts once someone signs in to Windows (with **Start with Windows** on). See [hardware setup → Prepare the Host PC](hardware-setup.md#3-prepare-the-host-pc).
 
 ### "No usable hardware video encoder"
 

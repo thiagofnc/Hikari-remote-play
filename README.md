@@ -125,7 +125,7 @@ From a clone of this repo, `scripts\flash-firmware.ps1` does the same from Power
 
 | On the PC at home | On the PC where you play |
 | --- | --- |
-| Choose **Host**. The checklist should go green: bridge, capture card, audio and encoder. Note the **pairing code** and the PC's addresses (LAN and Tailscale `100.x`). | Choose **Client**. Enter the host's Tailscale address or name and its pairing code. Press **Play** (or **A** on your controller). |
+| Choose **Host**. The checklist should go green: bridge, capture card, audio and encoder. Allow Hikari through the firewall when asked, then click **Copy invite**. | Choose **Client** and paste the invite. Hikari checks it before saving. Press **Play** (or **A** on your controller). |
 
 For Internet play, use **Set up Tailscale** on the host and **Install Tailscale** on the client to open the official download or installed app, then sign in with the same account on both PCs. Enter the host's Tailscale address so the saved connection works at home and away. You don't need port forwarding or Hikari hosting. Tailscale is a separate, one-time setup. See the [user guide](docs/user-guide.md) for the full walkthrough.
 
@@ -204,7 +204,7 @@ The **display mode** (<kbd>F2</kbd>) is a separate setting. It controls only how
 | --- | --- |
 | **30 fps instead of 60** | The capture card is on a USB 2.0 port or running in MJPEG mode. Move it to a blue/SS USB 3.0 port. |
 | **"Controller bridge not connected"** | The ESP32 **UART** port must go to the host PC and the **USB** port to the dock. Check that the firmware is flashed. |
-| **Can't connect over the Internet** | Run `tailscale ping <host>` on the client. If it says `via DERP`, you're relayed: it works, but with more latency. Allow **UDP 47800** in Windows Firewall on the host. |
+| **Can't connect over the Internet** | The Connect window tells you why (wrong code, not found, no answer). Check the host's **Always reachable → Windows Firewall** row. If the lobby says **relayed**, Tailscale couldn't make a direct path: it works, but with more latency. |
 | **No picture / "No HDMI signal"** | Wake the console, check that the dock is on its HDMI output, and try another HDMI cable. Some cards need the dock connected *before* the card is plugged in. |
 | **Inputs stop or release on their own** | That's the 250 ms failsafe: the bridge stopped hearing the host. Check Wi-Fi jitter and `tailscale ping`. |
 
