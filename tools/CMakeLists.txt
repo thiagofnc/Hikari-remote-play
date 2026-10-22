@@ -9,8 +9,6 @@ endfunction()
 
 hikari_tool(hikari-capture-probe capture_probe hikari_host_core)
 hikari_tool(hikari-encoder-probe encoder_probe hikari_host_core)
-# See the file header: works around a missing ICodecAPI uuid under mingw.
-target_sources(hikari-encoder-probe PRIVATE common/mingw_uuid_fix.cpp)
 hikari_tool(hikari-latency-test latency_test hikari_host_core)
 hikari_tool(hikari-pad pad_cli hikari_host_core)
 # The impairment proxy only needs sockets and timers.

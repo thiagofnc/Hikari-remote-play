@@ -56,6 +56,7 @@ endif()
 add_subdirectory(shared)
 add_subdirectory(media)
 add_subdirectory(host)
+add_subdirectory(ui)
 add_subdirectory(client)
 add_subdirectory(app)
 

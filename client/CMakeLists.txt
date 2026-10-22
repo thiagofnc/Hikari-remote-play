@@ -12,3 +12,18 @@ endif()
 if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/ui_demo/CMakeLists.txt)
     add_subdirectory(ui_demo)
 endif()
+
+add_library(hikari_client STATIC
+    src/audio_player.cpp
+    src/client_app.cpp
+    src/gamepad_input.cpp
+    src/net_client.cpp
+    src/renderer.cpp
+    src/video_decoder.cpp)
+target_include_directories(hikari_client PUBLIC src)
+target_link_libraries(hikari_client PUBLIC hikari_client_ui hikari_ui hikari_media
+    d3dcompiler hid ole32 oleaut32 uuid)
+if(HIKARI_WITH_OPUS)
+    target_link_libraries(hikari_client PUBLIC opus)
+    target_compile_definitions(hikari_client PUBLIC HIKARI_WITH_OPUS)
+endif()
