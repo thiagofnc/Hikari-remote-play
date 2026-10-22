@@ -48,13 +48,11 @@ For remote play, click **Set up Tailscale** on the Host and **Install Tailscale*
 
 The Client shows its own Tailscale IPv4 address once its adapter is available. This confirms that an address is assigned; it does not verify that both PCs belong to the same Tailscale network or that the host is reachable.
 
-1. Pick your host:
-   - **On the same network**: it appears in the list automatically (LAN discovery). When the host has Tailscale running, selecting it fills in its Tailscale address, labeled **Tailscale**. That saved destination works at home and away. Entries labeled **LAN only** require the same local network.
-   - **Over the Internet**: type its Tailscale name (e.g. `living-room-pc`) or `100.x.y.z` address. Any reachable IP or hostname works.
+1. Enter the host's **Tailscale address** (e.g. `100.x.y.z`) or configured MagicDNS name (e.g. `living-room-pc`). The address is shown on the Host screen. This same saved destination works at home and away. For local-only play, a LAN address also works. Connection settings do not scan for nearby hosts.
 2. Enter the **pairing code** once. Dashes and letter case don't matter, and `O`/`0`, `I`/`L`/`1` are treated the same.
 3. Done. The client remembers the host and goes straight to the lobby next time.
 
-If you previously saved a LAN address, open Connection settings and select the host again after Tailscale is set up, or enter the Tailscale address shown on the host. Leaving home does not automatically convert an existing LAN address into a Tailscale address.
+If you previously saved a LAN address, open Connection settings and replace it with the Tailscale address shown on the host. Leaving home does not automatically convert an existing LAN address into a Tailscale address.
 
 Tailscale supplies encryption and attempts direct connections, using its relay fallback when necessary. Relayed connections may have higher latency. See [Tailscale setup](https://tailscale.com/docs/install/windows) and its [current personal-use plans](https://tailscale.com/pricing). The host PC must remain awake with Hikari and Tailscale running.
 

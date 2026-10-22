@@ -43,9 +43,19 @@ private:
             p.button(ui_,id,row,"",ui::ButtonStyle::Ghost);
             p.line(x,row.b,right,row.b,ui::rgb(th::kBorder,0.5f),p.s(1));
             const float ix=x+p.s(16), iy=y+p.s(36);
-            p.stroke({ix,iy,ix+p.s(28),iy+p.s(20)},ui::rgb(th::kText2),p.s(1.5f),p.s(2));
-            p.line(ix+p.s(14),iy+p.s(20),ix+p.s(14),iy+p.s(27),ui::rgb(th::kText2),p.s(1.5f));
-            p.line(ix+p.s(7),iy+p.s(27),ix+p.s(21),iy+p.s(27),ui::rgb(th::kText2),p.s(1.5f));
+            if (id == 1) {
+                // Host: stacked server units. Client: a display and stand.
+                for (int unit=0;unit<2;++unit) {
+                    const float sy=iy+p.s(16*float(unit));
+                    p.stroke({ix,sy,ix+p.s(28),sy+p.s(12)},ui::rgb(th::kText2),p.s(1.5f),p.s(2));
+                    p.circle(ix+p.s(5),sy+p.s(6),p.s(1.5f),ui::rgb(th::kText2));
+                    p.line(ix+p.s(12),sy+p.s(6),ix+p.s(22),sy+p.s(6),ui::rgb(th::kText2),p.s(1.5f));
+                }
+            } else {
+                p.stroke({ix,iy,ix+p.s(28),iy+p.s(20)},ui::rgb(th::kText2),p.s(1.5f),p.s(2));
+                p.line(ix+p.s(14),iy+p.s(20),ix+p.s(14),iy+p.s(27),ui::rgb(th::kText2),p.s(1.5f));
+                p.line(ix+p.s(7),iy+p.s(27),ix+p.s(21),iy+p.s(27),ui::rgb(th::kText2),p.s(1.5f));
+            }
             p.text(title,{x+p.s(68),y+p.s(22),right-p.s(48),y+p.s(50)},p.s(17),ui::rgb(th::kText),ui::Weight::SemiBold);
             p.text(description,{x+p.s(68),y+p.s(54),right-p.s(48),y+p.s(82)},p.s(13),ui::rgb(th::kText2));
             const float ax=right-p.s(20), ay=row.cy();
@@ -65,17 +75,12 @@ private:
 class ClientSettings final : public D2DWindow {
 public:
     explicit ClientSettings(Config& cfg) : cfg_(cfg) {}
-    bool open(HWND owner, bool discover = true)
+    bool open(HWND owner, bool live = true)
     {
-        if (!create(L"Hikari - Connect to your host", 760, 568, owner)) return false;
+        if (!create(L"Hikari - Connect to your host", 600, 568, owner)) return false;
         host_ = add_edit(cfg_.get("client", "host"));
         code_ = add_edit(cfg_.get("client", "pairing_code"), true, true);
-        offline_ = !discover;
-        if (discover) {
-            ClientNetEvents events;
-            discovery_.start(std::move(events));
-            discovery_.set_discovery(true);
-        }
+        offline_ = !live;
         return true;
     }
     bool saved = false;
@@ -87,9 +92,8 @@ private:
             next_tailscale_check_ = GetTickCount64() + 2000;
         }
         p.background(r);
-        const float x=p.s(28),right=r.r-x,split=right-p.s(236),in=x,edge=split-p.s(28);
-        menu_header(p,r,"Connect to your host","Choose a nearby PC or enter the details shown on your host.");
-        p.line(split,p.s(124),split,p.s(440),ui::rgb(th::kBorder,0.5f),p.s(1));
+        const float x=p.s(28),right=r.r-x,in=x,edge=right;
+        menu_header(p,r,"Connect to your host","Enter the address and pairing code shown on your host PC.");
         p.text("Host details",{in,p.s(122),edge,p.s(150)},p.s(15),ui::rgb(th::kText),ui::Weight::SemiBold);
         p.text("Host address",{in,p.s(164),edge,p.s(188)},p.s(13),ui::rgb(th::kText));
         const Rect host_rect{in,p.s(194),edge,p.s(234)};
@@ -106,23 +110,7 @@ private:
         p.button(ui_,3,{in,p.s(404),in+p.s(148),p.s(440)},tailscale_.installed?"Open Tailscale":"Install Tailscale");
         p.text(offline_?"Offline preview":tailscale_.ipv4.empty()?"Sign in on both PCs with the same account.":"This PC: "+tailscale_.ipv4,
                {in+p.s(164),p.s(398),edge,p.s(446)},p.s(12),ui::rgb(th::kText2),ui::Weight::Regular,ui::Align::Leading,ui::Align::Center,true);
-        const float nx=split+p.s(28),nr=right;
-        p.text("Nearby hosts",{nx,p.s(122),nr,p.s(150)},p.s(15),ui::rgb(th::kText),ui::Weight::SemiBold);
-        hosts_=discovery_.discovered();
-        if(hosts_.empty()) {
-            p.text(offline_?"Discovery paused":"Looking for hosts...",{nx,p.s(176),nr,p.s(202)},p.s(13),ui::rgb(th::kText2));
-            p.text(offline_?"Discovery is disabled in this preview.":"Keep Hikari open on your host PC. It will appear here on the same network.",{nx,p.s(212),nr,p.s(286)},p.s(13),ui::rgb(th::kText2),ui::Weight::Regular,ui::Align::Leading,ui::Align::Leading,true);
-        }
-        for(size_t i=0;i<std::min<size_t>(hosts_.size(),2);++i) {
-            const float y=p.s(170+88*float(i));
-            p.button(ui_,100+int(i),{nx-p.s(8),y,nr,y+p.s(76)},"",ui::ButtonStyle::Ghost);
-            p.text(hosts_[i].name,{nx,y+p.s(8),nr-p.s(8),y+p.s(32)},p.s(13),ui::rgb(th::kText),ui::Weight::Medium);
-            p.text((hosts_[i].tailscale?"Tailscale: ":"LAN only: ")+hosts_[i].address,{nx,y+p.s(36),nr-p.s(8),y+p.s(70)},p.s(12),ui::rgb(th::kText2),ui::Weight::Regular,ui::Align::Leading,ui::Align::Leading,true);
-        }
-        p.line(nx,p.s(360),nr,p.s(360),ui::rgb(th::kBorder,0.5f),p.s(1));
-        p.text("Away from home?",{nx,p.s(376),nr,p.s(398)},p.s(13),ui::rgb(th::kText),ui::Weight::Medium);
-        p.text("Enter the Tailscale address shown on your host PC.",{nx,p.s(406),nr,p.s(452)},p.s(12),ui::rgb(th::kText2),ui::Weight::Regular,ui::Align::Leading,ui::Align::Leading,true);
-        p.text(error_,{x,p.s(452),split-p.s(20),p.s(484)},p.s(12),ui::rgb(th::kBad),ui::Weight::Regular,ui::Align::Leading,ui::Align::Center,true);
+        p.text(error_,{x,p.s(452),right,p.s(484)},p.s(12),ui::rgb(th::kBad),ui::Weight::Regular,ui::Align::Leading,ui::Align::Center,true);
         p.line(x,p.s(490),right,p.s(490),ui::rgb(th::kBorder,0.5f),p.s(1));
         p.text("Your connection is saved on this PC.",{x,p.s(506),right-p.s(282),p.s(544)},p.s(12),ui::rgb(th::kText3));
         p.button(ui_,2,{right-p.s(262),p.s(506),right-p.s(166),p.s(544)},"Cancel",ui::ButtonStyle::Ghost);
@@ -134,10 +122,6 @@ private:
         if (id == 2) { close(); return; }
         if (id == 3) {
             if (!offline_ && !open_tailscale_setup()) error_ = "Could not open Tailscale. Visit tailscale.com/download/windows.";
-            return;
-        }
-        if (id >= 100 && size_t(id - 100) < hosts_.size()) {
-            set_text(host_, hosts_[size_t(id - 100)].address);
             return;
         }
         if (id != 1) return;
@@ -159,8 +143,6 @@ private:
     void on_key(UINT key) override { if (key == VK_ESCAPE) close(); }
     Config& cfg_;
     HWND host_ = nullptr, code_ = nullptr;
-    ClientNet discovery_;
-    std::vector<DiscoveredHost> hosts_;
     std::string error_;
     bool offline_ = false;
     TailscaleInfo tailscale_;
