@@ -1,0 +1,60 @@
+menu "Hikari bridge"
+
+    config HIKARI_UART_PORT
+        int "UART port used for the host link"
+        range 0 2
+        default 0
+        help
+            UART0 is wired to the USB-UART bridge ("UART" port) on the
+            ESP32-S3-DevKitC-1. Use UART1 with an external adapter if you
+            need UART0 for something else.
+
+    config HIKARI_UART_TX_GPIO
+        int "Host link TX GPIO"
+        default 43
+
+    config HIKARI_UART_RX_GPIO
+        int "Host link RX GPIO"
+        default 44
+
+    config HIKARI_UART_BAUD
+        int "Host link baud rate"
+        default 2000000
+        help
+            2 Mbaud moves a 41-byte pad frame in ~205 us. CP2102N and CH343
+            bridges both support it. The host must use the same rate.
+
+    config HIKARI_FAILSAFE_MS
+        int "Neutral-state timeout (ms) when host packets stop"
+        default 250
+
+    config HIKARI_KEEPALIVE_REPORT_MS
+        int "Re-send the current report at least this often (ms)"
+        default 8
+
+    config HIKARI_POWER_BUTTON_GPIO
+        int "Power-button emulation GPIO (-1 = not fitted)"
+        default -1
+        help
+            Optional hardware wake fallback. Drive an optocoupler (e.g.
+            PC817) or a small relay whose contacts are wired across the
+            console's power button / dock power-sense. The pulse length is
+            requested by the host (default 150 ms).
+
+    config HIKARI_POWER_BUTTON_ACTIVE_HIGH
+        bool "Power-button GPIO is active high"
+        default y
+
+    config HIKARI_LATENCY_MARKER_GPIO
+        int "Latency-marker GPIO (-1 = off)"
+        default 4
+        help
+            Goes high for 2 ms when a report tagged with the latency-mark
+            flag is handed to the USB controller. Point a photodiode/LED at a
+            camera or a logic analyser at this pin for glass-to-glass tests.
+
+    config HIKARI_STATUS_LED_GPIO
+        int "Plain status LED GPIO (-1 = off)"
+        default -1
+
+endmenu

@@ -1,0 +1,19 @@
+idf_component_register(
+    SRCS
+        "main.c"
+        "host_link.c"
+        "pad_store.c"
+        "console_usb.c"
+        "profile_hori.c"
+        "wake.c"
+        "telemetry.c"
+        "board.c"
+        "${CMAKE_CURRENT_LIST_DIR}/../../../shared/protocol/hk_link.c"
+    INCLUDE_DIRS
+        "."
+        "${CMAKE_CURRENT_LIST_DIR}/../../../shared/protocol"
+    REQUIRES
+        driver esp_timer
+)
+
+target_compile_options(${COMPONENT_LIB} PRIVATE -Wall -Wextra -Wno-unused-parameter)

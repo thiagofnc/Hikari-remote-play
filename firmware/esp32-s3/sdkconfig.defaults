@@ -1,0 +1,27 @@
+CONFIG_IDF_TARGET="esp32s3"
+
+# Performance: 240 MHz, -O2, no power management (stable wake-up latency).
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
+CONFIG_COMPILER_OPTIMIZATION_PERF=y
+CONFIG_PM_ENABLE=n
+CONFIG_FREERTOS_HZ=1000
+
+# UART0 is the host link: keep the console and boot logs off it so the host
+# parser never sees log text mixed into frames.
+CONFIG_ESP_CONSOLE_NONE=y
+CONFIG_BOOTLOADER_LOG_LEVEL_NONE=y
+CONFIG_LOG_DEFAULT_LEVEL_NONE=y
+
+# Keep UART ISR in IRAM so flash operations never delay controller input.
+CONFIG_UART_ISR_IN_IRAM=y
+
+# TinyUSB device: one HID interface towards the console.
+CONFIG_TINYUSB_HID_COUNT=1
+CONFIG_TINYUSB_CDC_ENABLED=n
+CONFIG_TINYUSB_MSC_ENABLED=n
+CONFIG_TINYUSB_TASK_PRIORITY=22
+CONFIG_TINYUSB_TASK_AFFINITY_CPU0=y
+
+# Watchdogs stay on: a hung bridge must reboot into the neutral state.
+CONFIG_ESP_TASK_WDT_EN=y
+CONFIG_ESP_TASK_WDT_TIMEOUT_S=3
