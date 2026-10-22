@@ -300,14 +300,46 @@ void ClientApp::set_screen(Screen s)
 {
     if (screen_.exchange(s) == s) return;
     if (s == Screen::Stream) {
-        toast("Ctrl+Alt+Q  back to Hikari     F1  stats     F11  fullscreen", 4.0);
+        toast(mouse_aim_enabled() ? "Ctrl+Alt+Q  back to Hikari     F1  stats     F11  fullscreen     Click  mouse aim"
+                                  : "Ctrl+Alt+Q  back to Hikari     F1  stats     F11  fullscreen",
+              4.0);
         last_mouse_move_us_ = now_us();
     }
     update_sending();
 }
 
+bool ClientApp::mouse_aim_enabled()
+{
+    std::lock_guard<std::mutex> lk(mu_);
+    return mapping_.keyboard_enabled && mapping_.mouse_aim;
+}
+
+void ClientApp::set_mouse_captured(bool on)
+{
+    if (on == mouse_captured_) return;
+    mouse_captured_ = on;
+    input_.set_mouse_captured(on);
+    if (on) {
+        clip_cursor();
+        SetCursor(nullptr);
+        toast("Mouse captured     Esc  release", 2.5);
+    } else {
+        ClipCursor(nullptr);
+        last_mouse_move_us_ = now_us();  // show the pointer again right away
+    }
+}
+
+void ClientApp::clip_cursor()
+{
+    RECT rc;
+    GetClientRect(hwnd_, &rc);
+    MapWindowPoints(hwnd_, nullptr, reinterpret_cast<POINT*>(&rc), 2);
+    ClipCursor(&rc);
+}
+
 void ClientApp::update_sending()
 {
+    if (screen_ != Screen::Stream || !focused_ || !mouse_aim_enabled()) set_mouse_captured(false);
     const bool background = cfg_->get_bool("client", "input_background", false);
     input_.set_sending(screen_ == Screen::Stream && (focused_ || background) && net_.state() == ConnState::Connected);
 }
@@ -389,9 +421,12 @@ void ClientApp::open_controller_settings()
         m = mapping_;
     }
     if (show_controller_settings(hwnd_, *cfg_, m, deps)) {
-        std::lock_guard<std::mutex> lk(mu_);
-        mapping_ = m;
-        input_.set_mapping(m);
+        {
+            std::lock_guard<std::mutex> lk(mu_);
+            mapping_ = m;
+            input_.set_mapping(m);
+        }
+        update_sending();
     }
 }
 
@@ -467,6 +502,10 @@ void ClientApp::on_key(UINT vk, bool down)
             return;
         }
     }
+    if (vk == VK_ESCAPE && mouse_captured_) {
+        if (down) set_mouse_captured(false);
+        return;
+    }
     if (vk == VK_F8) input_.set_injected(down ? HK_BTN_HOME : 0);
     if (vk == VK_F9) input_.set_injected(down ? HK_BTN_CAPTURE : 0);
     if (screen_ == Screen::Stream && vk < 256) {
@@ -484,7 +523,9 @@ LRESULT ClientApp::handle_message(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 {
     switch (msg) {
     case WM_SIZE:
-        resize_pending_ = true;
+    case WM_MOVE:
+        if (msg == WM_SIZE) resize_pending_ = true;
+        if (mouse_captured_) clip_cursor();
         return 0;
     case WM_GETMINMAXINFO: {
         auto* mm = reinterpret_cast<MINMAXINFO*>(lp);
@@ -498,6 +539,7 @@ LRESULT ClientApp::handle_message(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         return 0;
     }
     case WM_MOUSEMOVE: {
+        if (mouse_captured_) return 0;  // aim comes from Raw Input; keep the overlay hidden
         std::lock_guard<std::mutex> lk(mu_);
         ui_.mouse_x = static_cast<float>(GET_X_LPARAM(lp));
         ui_.mouse_y = static_cast<float>(GET_Y_LPARAM(lp));
@@ -512,14 +554,26 @@ LRESULT ClientApp::handle_message(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         return 0;
     }
     case WM_LBUTTONDOWN: {
+        if (mouse_captured_) return 0;  // buttons come from Raw Input
+        int hit;
+        {
+            std::lock_guard<std::mutex> lk(mu_);
+            hit = ui_.hit(static_cast<float>(GET_X_LPARAM(lp)), static_cast<float>(GET_Y_LPARAM(lp)));
+        }
+        // A click on the picture (not on an overlay control) locks the pointer for aiming.
+        if (hit < 0 && screen_ == Screen::Stream && focused_ && mouse_aim_enabled()) {
+            set_mouse_captured(true);
+            return 0;
+        }
         std::lock_guard<std::mutex> lk(mu_);
         ui_.mouse_down = true;
-        ui_.pressed_id = ui_.hit(static_cast<float>(GET_X_LPARAM(lp)), static_cast<float>(GET_Y_LPARAM(lp)));
+        ui_.pressed_id = hit;
         if (ui_.pressed_id >= 0) ui_.focus_id = ui_.pressed_id;
         SetCapture(hwnd);
         return 0;
     }
     case WM_LBUTTONUP: {
+        if (mouse_captured_) return 0;
         std::lock_guard<std::mutex> lk(mu_);
         const int id = ui_.hit(static_cast<float>(GET_X_LPARAM(lp)), static_cast<float>(GET_Y_LPARAM(lp)));
         if (id >= 0 && id == ui_.pressed_id) ui_.clicked_id = id;
@@ -532,7 +586,8 @@ LRESULT ClientApp::handle_message(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         if (screen_ == Screen::Stream) toggle_fullscreen();
         return 0;
     case WM_SETCURSOR:
-        if (LOWORD(lp) == HTCLIENT && screen_ == Screen::Stream && now_us() - last_mouse_move_us_ > 2'000'000) {
+        if (LOWORD(lp) == HTCLIENT && screen_ == Screen::Stream &&
+            (mouse_captured_ || now_us() - last_mouse_move_us_ > 2'000'000)) {
             SetCursor(nullptr);
             return TRUE;
         }

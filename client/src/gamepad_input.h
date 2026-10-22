@@ -8,6 +8,8 @@
 //   * Raw Input HID for Sony DualShock 4 / DualSense (USB + Bluetooth):
 //     event driven, so a report is translated and sent the moment it lands.
 //   * Keyboard (state pushed from the window thread).
+//   * Mouse, via Raw Input while the stream window has captured the pointer:
+//     buttons and wheel bind like keys, motion can drive the right stick.
 //
 // The active device is chosen automatically: whichever controller was used
 // most recently drives the console (unless one is pinned in settings).
@@ -17,6 +19,7 @@
 // and an unchanged state is refreshed every `refresh_ms`.
 
 #include <atomic>
+#include <bitset>
 #include <functional>
 #include <mutex>
 #include <string>
@@ -42,6 +45,7 @@ public:
     void set_sending(bool on);         // streaming and window focused
     void set_refresh_ms(uint32_t ms) { refresh_ms_ = ms; }
     void set_keyboard(const KeyboardState& kb);
+    void set_mouse_captured(bool on);  // pointer locked to the stream window
     void pin_device(const std::string& name);  // "" = automatic
     void mark_next_latency();          // tag the next sent state for glass-to-glass tests
     void set_injected(uint32_t buttons) { injected_ = buttons; }  // hotkeys (F8 = HOME, F9 = Capture)
@@ -68,6 +72,7 @@ private:
     };
 
     void run();
+    void on_mouse(const void* rawmouse, uint64_t now);
     void poll_xinput(uint64_t now, bool full_scan);
     void produce(uint64_t now, bool force);
     Device* active();
@@ -86,6 +91,14 @@ private:
     InputMapping mapping_;
     KeyboardState keyboard_;
     bool kb_dirty_ = false;
+
+    std::atomic<bool> mouse_captured_{false};
+    MouseAim mouse_;
+    std::bitset<256> mouse_down_;      // mouse buttons and wheel notches, as VK codes
+    uint64_t wheel_release_us_[2]{};   // wheel up / down
+    bool mouse_aiming_ = false;
+    int16_t mouse_rx_ = 0, mouse_ry_ = 0;
+    uint64_t last_tick_us_ = 0;
 
     std::atomic<bool> sending_{false};
     std::atomic<uint32_t> refresh_ms_{16};

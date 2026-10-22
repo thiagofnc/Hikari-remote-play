@@ -104,12 +104,13 @@ To leave the stream, press <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Q</kbd> to go bac
 | <kbd>F9</kbd> | Send **Capture** (console screenshot) |
 | <kbd>F12</kbd> | Save a screenshot of the stream on this PC |
 | <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Q</kbd> | Back to the lobby |
+| Click the picture / <kbd>Esc</kbd> | Capture / release the mouse for mouse aim |
 
 ## Controller mapping
 
 Open **Settings → Controller**. A Joy-Con drawing shows every Switch input. Click a button on the drawing, then press the physical button or key you want for it.
 
-**Controllers supported**: Xbox and other XInput pads, controllers exposed through Windows.Gaming.Input, DualShock 4 and DualSense (raw HID), and the keyboard (while the client window has focus). The client polls them at 1 kHz.
+**Controllers supported**: Xbox and other XInput pads, controllers exposed through Windows.Gaming.Input, DualShock 4 and DualSense (raw HID), and keyboard & mouse (while the client window has focus). The client polls them at 1 kHz.
 
 **Two default layouts:**
 
@@ -127,7 +128,11 @@ Open **Settings → Controller**. A Joy-Con drawing shows every Switch input. Cl
 | Analog sticks | on | Sticks drive the Switch sticks directly at full precision. |
 | Stick deadzone | 0 | The console applies its own deadzone. Raise it only for a drifting stick. |
 | Triggers → ZL/ZR | pressed past ~25 % travel | The HORI wired profile has digital ZL/ZR. The analog value still travels end to end for future profiles. |
-| Keyboard | on | Bind any key to any Switch input, including stick directions. |
+| Keyboard & mouse | on | Bind any key, mouse button or wheel direction to any Switch input, including stick directions. |
+| Mouse aim | on | Click the stream to capture the mouse; moving it tilts the right stick. <kbd>Esc</kbd> releases it. |
+| Mouse sensitivity | 1.0× | How far the right stick tilts for a given mouse speed. **Invert mouse Y** flips vertical aim. |
+
+Mouse aim drives the right stick, so the console's own stick acceleration and top turn speed still apply. Slow movements always tilt the stick past the console deadzone, so fine aiming still registers. Very fast flicks reach full tilt, which is the stick's top turn speed, so they turn less than the same flick would on a PC.
 
 **Profiles**: save mappings as named profiles (e.g. *Default*, *Fighting*, *Keyboard*) and switch between them from the same screen. They're stored in `%LOCALAPPDATA%\Hikari\hikari.ini` as `[mapping.<name>]` sections.
 

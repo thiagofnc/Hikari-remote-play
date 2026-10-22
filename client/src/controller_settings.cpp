@@ -286,7 +286,12 @@ private:
     D2D1_RECT_F dialog_ok_rect() const;
     D2D1_RECT_F dialog_cancel_rect() const;
     D2D1_RECT_F dialog_field_rect() const;
-    void set_deadzone_from_x(float x);
+    // The options row under the bindings depends on the tab: stick options
+    // for the gamepad, mouse options for keyboard & mouse.
+    bool& option(int i);
+    float slider_value() const;  // 0..1
+    void set_slider_from_x(float x);
+    bool capture_mouse_bind(unsigned vk);
     float dip(int px) const { return static_cast<float>(px) * 96.0f / static_cast<float>(dpi_); }
 
     // drawing
@@ -650,11 +655,35 @@ void SettingsWindow::request_close()
     done_ = true;
 }
 
-void SettingsWindow::set_deadzone_from_x(float x)
+bool& SettingsWindow::option(int i)
+{
+    if (tab_ == Tab::Keyboard) return i == 0 ? work_.keyboard_enabled : i == 1 ? work_.mouse_aim : work_.mouse_invert_y;
+    return i == 0 ? work_.analog_sticks : i == 1 ? work_.analog_triggers : work_.keyboard_enabled;
+}
+
+// Sensitivity runs 0.2x..3.0x in 0.1 steps; deadzone 0..30% in 1% steps.
+float SettingsWindow::slider_value() const
+{
+    if (tab_ == Tab::Keyboard) return std::clamp((work_.mouse_sensitivity - 0.2f) / 2.8f, 0.0f, 1.0f);
+    return std::clamp(work_.stick_deadzone / 0.3f, 0.0f, 1.0f);
+}
+
+void SettingsWindow::set_slider_from_x(float x)
 {
     const D2D1_RECT_F& t = lay_.slider_track;
     const float v = std::clamp((x - t.left) / std::max(1.0f, t.right - t.left), 0.0f, 1.0f);
-    work_.stick_deadzone = std::round(v * 30.0f) / 100.0f;
+    if (tab_ == Tab::Keyboard)
+        work_.mouse_sensitivity = (2.0f + std::round(v * 28.0f)) / 10.0f;
+    else
+        work_.stick_deadzone = std::round(v * 30.0f) / 100.0f;
+}
+
+// Mouse buttons and the wheel bind like keys while a keyboard binding listens.
+bool SettingsWindow::capture_mouse_bind(unsigned vk)
+{
+    if (cap_target_ < 0 || tab_ != Tab::Keyboard || dlg_.kind != DlgKind::None || drop_ != Drop::None) return false;
+    bind(key_input(vk));
+    return true;
 }
 
 void SettingsWindow::tick()
@@ -703,8 +732,7 @@ void SettingsWindow::tick()
         }
     }
 
-    const bool toggles[3] = {work_.analog_sticks, work_.analog_triggers, work_.keyboard_enabled};
-    for (int i = 0; i < 3; ++i) toggle_anim_[i] += ((toggles[i] ? 1.0f : 0.0f) - toggle_anim_[i]) * 0.35f;
+    for (int i = 0; i < 3; ++i) toggle_anim_[i] += ((option(i) ? 1.0f : 0.0f) - toggle_anim_[i]) * 0.35f;
 }
 
 // ---- layout & hit testing -----------------------------------------------------
@@ -740,7 +768,7 @@ void SettingsWindow::compute_layout()
 
     const float pad = 18.0f;
     const D2D1_RECT_F in = inset(L.left_card, pad, pad);
-    L.tabs = {in.left, in.top, in.left + 236, in.top + 34};
+    L.tabs = {in.left, in.top, in.left + 300, in.top + 34};
     L.tab_pad = {L.tabs.left + 3, L.tabs.top + 3, L.tabs.left + 118, L.tabs.bottom - 3};
     L.tab_kb = {L.tab_pad.right, L.tabs.top + 3, L.tabs.right - 3, L.tabs.bottom - 3};
     L.hint = {L.tabs.right + 16, in.top, in.right, in.top + 34};
@@ -754,8 +782,8 @@ void SettingsWindow::compute_layout()
         L.toggles[i] = {tx, opt_top, tx + tw - 8, opt_top + 30};
     }
     const float sy = opt_top + 44.0f;
-    L.slider_label = {in.left, sy, in.left + 120, sy + 30};
-    L.slider_track = {in.left + 130, sy + 13, in.left + 130 + std::min(260.0f, in.right - in.left - 260), sy + 17};
+    L.slider_label = {in.left, sy, in.left + 140, sy + 30};
+    L.slider_track = {in.left + 150, sy + 13, in.left + 150 + std::min(260.0f, in.right - in.left - 280), sy + 17};
     L.slider_hit = {L.slider_track.left - 10, sy, L.slider_track.right + 10, sy + 30};
     L.slider_value = {L.slider_track.right + 16, sy, L.slider_track.right + 72, sy + 30};
 
@@ -943,8 +971,13 @@ void SettingsWindow::activate(const Hit& h)
     case El::Binding:
     case El::Art:
         focus_ = h.idx;
-        if (cap_target_ == h.idx) cancel_capture();
-        else start_capture(h.idx);
+        if (cap_target_ == h.idx) {
+            // Clicking the listening keyboard binding again binds the left button.
+            if (tab_ == Tab::Keyboard) bind(key_input(VK_LBUTTON));
+            else cancel_capture();
+        } else {
+            start_capture(h.idx);
+        }
         break;
     case El::DevDrop: drop_ = drop_ == Drop::Device ? Drop::None : Drop::Device; break;
     case El::LayoutDrop: drop_ = drop_ == Drop::Layout ? Drop::None : Drop::Layout; break;
@@ -1029,11 +1062,7 @@ void SettingsWindow::activate(const Hit& h)
         break;
     case El::TabPad: set_tab(Tab::Gamepad); break;
     case El::TabKb: set_tab(Tab::Keyboard); break;
-    case El::Toggle:
-        if (h.idx == 0) work_.analog_sticks = !work_.analog_sticks;
-        if (h.idx == 1) work_.analog_triggers = !work_.analog_triggers;
-        if (h.idx == 2) work_.keyboard_enabled = !work_.keyboard_enabled;
-        break;
+    case El::Toggle: option(h.idx) = !option(h.idx); break;
     case El::Reset:
         confirm(L"Reset to defaults?",
                 L"All gamepad and keyboard bindings and options in “" + widen(work_.profile) +
@@ -1326,15 +1355,16 @@ void SettingsWindow::draw_bindings()
              col(sel ? kText : kText2), DWRITE_TEXT_ALIGNMENT_CENTER);
     };
     tab(lay_.tab_pad, L"Gamepad", tab_ == Tab::Gamepad, {El::TabPad, 0});
-    tab(lay_.tab_kb, L"Keyboard", tab_ == Tab::Keyboard, {El::TabKb, 0});
+    tab(lay_.tab_kb, L"Keyboard & mouse", tab_ == Tab::Keyboard, {El::TabKb, 0});
 
     std::wstring hint;
     D2D1_COLOR_F hint_col = col(kText3);
     if (cap_target_ >= 0) {
-        hint = L"Esc cancels  ·  Delete clears";
+        hint = tab_ == Tab::Keyboard ? L"Mouse works too  ·  Esc cancels  ·  Delete clears"
+                                     : L"Esc cancels  ·  Delete clears";
         hint_col = col(kAmber);
     } else if (tab_ == Tab::Keyboard && !work_.keyboard_enabled) {
-        hint = L"Keyboard input is turned off below";
+        hint = L"Keyboard & mouse input is turned off below";
         hint_col = col(kDanger);
     } else {
         hint = L"Click a binding, then press the input to use";
@@ -1367,7 +1397,9 @@ void SettingsWindow::draw_options()
     const float y = std::floor(lay_.options_divider) + 0.5f;
     rt_->DrawLine({lay_.left_card.left + 18, y}, {lay_.left_card.right - 18, y}, brush_.Get(), 1.0f);
 
-    static const wchar_t* const kLabels[3] = {L"Analog sticks", L"Analog triggers", L"Keyboard enabled"};
+    static const wchar_t* const kPadLabels[3] = {L"Analog sticks", L"Analog triggers", L"Keyboard & mouse"};
+    static const wchar_t* const kKbLabels[3] = {L"Keyboard & mouse", L"Mouse aim", L"Invert mouse Y"};
+    const wchar_t* const* kLabels = tab_ == Tab::Keyboard ? kKbLabels : kPadLabels;
     for (int i = 0; i < 3; ++i) {
         const D2D1_RECT_F r = lay_.toggles[i];
         const bool hov = hover_ == Hit{El::Toggle, i};
@@ -1386,9 +1418,10 @@ void SettingsWindow::draw_options()
     }
 
     const bool hov = hover_.el == El::Slider || dragging_slider_;
-    text(L"Stick deadzone", lay_.slider_label, f_body_.Get(), col(0xC8CCD1));
+    const bool kb = tab_ == Tab::Keyboard;
+    text(kb ? L"Mouse sensitivity" : L"Stick deadzone", lay_.slider_label, f_body_.Get(), col(0xC8CCD1));
     const D2D1_RECT_F t = lay_.slider_track;
-    const float v = std::clamp(work_.stick_deadzone / 0.3f, 0.0f, 1.0f);
+    const float v = slider_value();
     const float kx = t.left + (t.right - t.left) * v;
     fill_rr(t, 2, col(0x3A404A));
     fill_rr({t.left, t.top, kx, t.bottom}, 2, col(kAmber));
@@ -1402,7 +1435,10 @@ void SettingsWindow::draw_options()
     brush_->SetColor(col(kAmber));
     rt_->DrawEllipse(D2D1::Ellipse({kx, cy}, 7.5f, 7.5f), brush_.Get(), 1.5f);
     wchar_t buf[48];
-    swprintf(buf, 48, L"%d%%", static_cast<int>(std::lround(work_.stick_deadzone * 100.0f)));
+    if (kb)
+        swprintf(buf, 48, L"%.1f×", static_cast<double>(work_.mouse_sensitivity));
+    else
+        swprintf(buf, 48, L"%d%%", static_cast<int>(std::lround(work_.stick_deadzone * 100.0f)));
     text(buf, {lay_.slider_value.left, lay_.slider_value.top, lay_.slider_value.left + 44, lay_.slider_value.bottom},
          f_body_sb_.Get(), col(kText));
 
@@ -1421,7 +1457,7 @@ void SettingsWindow::draw_art_card()
     uint32_t dot = kText3;
     bool live = false;
     if (tab_ == Tab::Keyboard) {
-        status = work_.keyboard_enabled ? L"Keyboard" : L"Keyboard (disabled)";
+        status = work_.keyboard_enabled ? L"Keyboard & mouse" : L"Keyboard & mouse (disabled)";
         dot = work_.keyboard_enabled ? kAmber : kText3;
         live = work_.keyboard_enabled;
     } else if (raw_.connected) {
@@ -1461,7 +1497,7 @@ void SettingsWindow::draw_art_card()
     std::wstring hint = L"Click any part of the controller to rebind it";
     D2D1_COLOR_F hc = col(kText3);
     if (cap_target_ >= 0) {
-        hint = std::wstring(tab_ == Tab::Gamepad ? L"Press the controller input for " : L"Press the key for ") +
+        hint = std::wstring(tab_ == Tab::Gamepad ? L"Press the controller input for " : L"Press the key or mouse button for ") +
                widen(to_string(static_cast<SwitchInput>(cap_target_)));
         hc = col(kAmber);
     }
@@ -1631,7 +1667,7 @@ LRESULT SettingsWindow::handle(UINT msg, WPARAM wp, LPARAM lp)
             TrackMouseEvent(&tme);
             tracking_mouse_ = true;
         }
-        if (dragging_slider_) set_deadzone_from_x(x);
+        if (dragging_slider_) set_slider_from_x(x);
         hover_ = hit_test(x, y);
         return 0;
     }
@@ -1647,7 +1683,7 @@ LRESULT SettingsWindow::handle(UINT msg, WPARAM wp, LPARAM lp)
         if (pressed_.el == El::Slider) {
             cancel_capture();
             dragging_slider_ = true;
-            set_deadzone_from_x(x);
+            set_slider_from_x(x);
         } else if (pressed_.el == El::Backdrop && drop_ != Drop::None) {
             drop_ = Drop::None;  // click-away closes the popup immediately
             pressed_ = {};
@@ -1671,6 +1707,18 @@ LRESULT SettingsWindow::handle(UINT msg, WPARAM wp, LPARAM lp)
         hover_ = hit_test(x, y);
         return 0;
     }
+    case WM_RBUTTONDOWN:
+        if (capture_mouse_bind(VK_RBUTTON)) return 0;
+        break;
+    case WM_MBUTTONDOWN:
+        if (capture_mouse_bind(VK_MBUTTON)) return 0;
+        break;
+    case WM_XBUTTONDOWN:
+        if (capture_mouse_bind(GET_XBUTTON_WPARAM(wp) == XBUTTON1 ? VK_XBUTTON1 : VK_XBUTTON2)) return TRUE;
+        break;
+    case WM_MOUSEWHEEL:
+        if (capture_mouse_bind(GET_WHEEL_DELTA_WPARAM(wp) > 0 ? kVkWheelUp : kVkWheelDown)) return 0;
+        break;
     case WM_SETCURSOR:
         if (LOWORD(lp) == HTCLIENT) {
             const LPCWSTR cur = hover_.el == El::DlgField ? IDC_IBEAM : clickable(hover_) ? IDC_HAND : IDC_ARROW;

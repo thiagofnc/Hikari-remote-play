@@ -90,7 +90,7 @@ flowchart LR
   <tr>
     <td valign="top">
       <h4>🕹️ Bring any pad</h4>
-      Works with Xbox, DualShock 4, DualSense and keyboards. A Joy-Con-style mapping screen offers positional or label layouts and profiles.
+      Works with Xbox, DualShock 4, DualSense and keyboard & mouse, with mouse aim on the right stick. A Joy-Con-style mapping screen offers positional or label layouts and profiles.
     </td>
     <td valign="top">
       <h4>🔎 Zero configuration</h4>
@@ -185,6 +185,7 @@ Your controller acts as the Switch controller. Remap anything in **Settings → 
 | <kbd>F9</kbd> | Send **Capture** |
 | <kbd>F12</kbd> | Screenshot |
 | <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Q</kbd> | Back to the lobby |
+| Click / <kbd>Esc</kbd> | Capture / release the mouse for mouse aim |
 
 ## Settings & presets
 

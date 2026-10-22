@@ -114,6 +114,8 @@ const char* vk_name(unsigned vk)
     case 0x05: return "Mouse X1";
     case 0x06: return "Mouse X2";
     case 0x08: return "Backspace";
+    case kVkWheelUp: return "Wheel Up";
+    case kVkWheelDown: return "Wheel Down";
     case 0x09: return "Tab";
     case 0x0D: return "Enter";
     case 0x10: return "Shift";
@@ -403,6 +405,36 @@ proto::PadState InputMapping::apply(const RawPadState& raw, const KeyboardState&
     return out;
 }
 
+bool MouseAim::step(uint64_t dt_us, const InputMapping& m, int16_t& x, int16_t& y)
+{
+    // Mouse speed (counts/s) that tilts the stick fully at sensitivity 1:
+    // a brisk flick on an 800 DPI mouse.
+    constexpr float kFullSpeed = 2500.0f;
+    // Small movements start past the console's own stick deadzone, so slow,
+    // precise aiming still turns the camera.
+    constexpr float kMinTilt = 0.12f;
+    constexpr float kSmoothS = 0.010f;  // evens out 125..1000 Hz mouse reports
+
+    const float dt = std::clamp(static_cast<float>(dt_us) / 1e6f, 0.0005f, 0.05f);
+    const float a = 1.0f - std::exp(-dt / kSmoothS);
+    vx_ += (static_cast<float>(acc_x_) / dt - vx_) * a;
+    vy_ += (static_cast<float>(acc_y_) / dt - vy_) * a;
+    acc_x_ = acc_y_ = 0;
+
+    const float full = kFullSpeed / std::clamp(m.mouse_sensitivity, 0.2f, 3.0f);
+    const float fx = vx_ / full;
+    const float fy = (m.mouse_invert_y ? vy_ : -vy_) / full;  // mouse +Y is down, stick +Y is up
+    const float mag = std::sqrt(fx * fx + fy * fy);
+    if (mag < 0.01f) {
+        vx_ = vy_ = 0;
+        return false;
+    }
+    const float scale = (kMinTilt + (1.0f - kMinTilt) * std::min(1.0f, mag)) / mag;
+    x = static_cast<int16_t>(std::clamp(fx * scale * 32767.0f, -32767.0f, 32767.0f));
+    y = static_cast<int16_t>(std::clamp(fy * scale * 32767.0f, -32767.0f, 32767.0f));
+    return true;
+}
+
 void InputMapping::load(const Config& cfg, const std::string& section)
 {
     if (section.rfind("mapping.", 0) == 0) profile = section.substr(8);
@@ -416,6 +448,10 @@ void InputMapping::load(const Config& cfg, const std::string& section)
     analog_sticks = cfg.get_bool(section, "analog_sticks", analog_sticks);
     analog_triggers = cfg.get_bool(section, "analog_triggers", analog_triggers);
     keyboard_enabled = cfg.get_bool(section, "keyboard_enabled", keyboard_enabled);
+    mouse_aim = cfg.get_bool(section, "mouse_aim", mouse_aim);
+    mouse_invert_y = cfg.get_bool(section, "mouse_invert_y", mouse_invert_y);
+    mouse_sensitivity =
+        std::clamp(static_cast<float>(cfg.get_double(section, "mouse_sensitivity", mouse_sensitivity)), 0.2f, 3.0f);
     stick_deadzone = std::clamp(static_cast<float>(cfg.get_double(section, "stick_deadzone", stick_deadzone)), 0.0f, 0.3f);
 }
 
@@ -429,9 +465,13 @@ void InputMapping::save(Config& cfg, const std::string& section) const
     cfg.set_bool(section, "analog_sticks", analog_sticks);
     cfg.set_bool(section, "analog_triggers", analog_triggers);
     cfg.set_bool(section, "keyboard_enabled", keyboard_enabled);
+    cfg.set_bool(section, "mouse_aim", mouse_aim);
+    cfg.set_bool(section, "mouse_invert_y", mouse_invert_y);
     char buf[32];
     std::snprintf(buf, sizeof(buf), "%.3f", static_cast<double>(stick_deadzone));
     cfg.set(section, "stick_deadzone", buf);
+    std::snprintf(buf, sizeof(buf), "%.2f", static_cast<double>(mouse_sensitivity));
+    cfg.set(section, "mouse_sensitivity", buf);
 }
 
 const char* to_string(SwitchInput s)
@@ -500,6 +540,8 @@ bool mapping_equal(const InputMapping& a, const InputMapping& b)
 {
     return a.profile == b.profile && a.pad == b.pad && a.keyboard == b.keyboard && a.analog_sticks == b.analog_sticks &&
            a.analog_triggers == b.analog_triggers && a.keyboard_enabled == b.keyboard_enabled &&
+           a.mouse_aim == b.mouse_aim && a.mouse_invert_y == b.mouse_invert_y &&
+           std::fabs(a.mouse_sensitivity - b.mouse_sensitivity) < 0.005f &&
            std::fabs(a.stick_deadzone - b.stick_deadzone) < 0.0005f;
 }
 

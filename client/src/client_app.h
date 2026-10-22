@@ -74,6 +74,9 @@ private:
     void update_sending();
     void toast(const std::string& msg, double seconds = 3.0);
     void on_key(UINT vk, bool down);
+    bool mouse_aim_enabled();
+    void set_mouse_captured(bool on);  // UI thread
+    void clip_cursor();
     void open_controller_settings();
     double now_s() const;
 
@@ -101,6 +104,7 @@ private:
     std::atomic<bool> focused_{true};
     std::atomic<bool> show_stats_{false};
     std::atomic<bool> fullscreen_{false};
+    bool mouse_captured_ = false;  // UI thread
     std::atomic<bool> screenshot_{false};
     std::atomic<bool> need_keyframe_{false};
     RECT windowed_rect_{};

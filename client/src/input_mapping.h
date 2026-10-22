@@ -55,6 +55,9 @@ enum class PhysicalInput : uint16_t {
 inline PhysicalInput key_input(unsigned vk) { return static_cast<PhysicalInput>(0x100 + (vk & 0xFF)); }
 inline bool is_key(PhysicalInput p) { return static_cast<uint16_t>(p) >= 0x100; }
 inline unsigned key_vk(PhysicalInput p) { return static_cast<uint16_t>(p) - 0x100; }
+// Mouse buttons bind as their own VK codes (VK_LBUTTON ...). Wheel notches use
+// two codes Windows leaves reserved, so they bind like keys too.
+constexpr unsigned kVkWheelUp = 0x0A, kVkWheelDown = 0x0B;
 
 // Switch-side inputs that can be bound.
 enum class SwitchInput : uint8_t {
@@ -94,7 +97,12 @@ struct InputMapping {
     bool analog_sticks = true;
     bool analog_triggers = true;  // pass LT/RT through as analog ZL/ZR values
     float stick_deadzone = 0.0f;  // 0..0.3; the console applies its own deadzone
-    bool keyboard_enabled = true;
+    bool keyboard_enabled = true;  // keyboard and mouse
+    // Mouse aim: while the pointer is captured in the stream, mouse motion
+    // drives the right stick.
+    bool mouse_aim = true;
+    float mouse_sensitivity = 1.0f;  // 0.2..3.0
+    bool mouse_invert_y = false;
 
     // Positional layout (Xbox A -> Switch B, Xbox B -> Switch A, ...): buttons
     // stay where Switch muscle memory expects them.
@@ -106,6 +114,25 @@ struct InputMapping {
 
     void load(const Config& cfg, const std::string& section);
     void save(Config& cfg, const std::string& section) const;
+};
+
+// Mouse motion -> right-stick deflection. The mouse reports distance, a stick
+// reports turn speed, so counts are turned into a smoothed velocity first.
+class MouseAim {
+public:
+    void add(int dx, int dy)
+    {
+        acc_x_ += dx;
+        acc_y_ += dy;
+    }
+    // Advances the filter by dt_us. Returns false while the mouse is at rest,
+    // so the other right-stick sources keep control.
+    bool step(uint64_t dt_us, const InputMapping& m, int16_t& x, int16_t& y);
+    void reset() { *this = MouseAim{}; }
+
+private:
+    float vx_ = 0, vy_ = 0;  // counts per second
+    int acc_x_ = 0, acc_y_ = 0;
 };
 
 const char* to_string(SwitchInput s);

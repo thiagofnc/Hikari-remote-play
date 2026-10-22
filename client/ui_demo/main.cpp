@@ -265,6 +265,29 @@ int selftest()
         o = m.apply(r, no_keys);
         CHECK(o.lt == 255 && o.rt == 0);
     }
+    {  // Mouse aim: motion tilts the right stick, rest hands it back.
+        InputMapping m = InputMapping::defaults_positional();
+        MouseAim aim;
+        int16_t x = 0, y = 0;
+        CHECK(!aim.step(1000, m, x, y));
+        for (int i = 0; i < 50; ++i) {  // 1 count/ms right and up = 1000 counts/s
+            aim.add(1, -1);
+            aim.step(1000, m, x, y);
+        }
+        aim.add(1, -1);
+        CHECK(aim.step(1000, m, x, y) && x > 4000 && y > 4000 && std::abs(x - y) < 200);
+        MouseAim slow;  // a single count still clears the console deadzone
+        slow.add(1, 0);
+        CHECK(slow.step(1000, m, x, y) && x >= 3900);
+        aim.add(1000, 0);  // flick saturates
+        CHECK(aim.step(1000, m, x, y) && x > 32000);
+        m.mouse_invert_y = true;
+        aim.reset();
+        aim.add(0, -10);
+        CHECK(aim.step(1000, m, x, y) && y < 0);
+        for (int i = 0; i < 200; ++i) aim.step(1000, m, x, y);  // decays back to rest
+        CHECK(!aim.step(1000, m, x, y));
+    }
     {  // Keyboard defaults: no duplicates, Esc/Delete/Backspace free.
         const auto kb = default_keyboard_bindings();
         for (size_t i = 0; i < kb.size(); ++i) {
@@ -296,6 +319,11 @@ int selftest()
         m.analog_triggers = false;
         m.keyboard_enabled = false;
         m.stick_deadzone = 0.12f;
+        m.mouse_aim = false;
+        m.mouse_invert_y = true;
+        m.mouse_sensitivity = 1.7f;
+        m.keyboard[static_cast<size_t>(SwitchInput::ZR)] = key_input(VK_LBUTTON);
+        m.keyboard[static_cast<size_t>(SwitchInput::R)] = key_input(kVkWheelUp);
         Config cfg;
         m.save(cfg, "mapping.Zelda");
         InputMapping::defaults_positional().save(cfg, "mapping.Default");

@@ -111,6 +111,9 @@ bool parse_sony(const uint8_t* r, size_t n, bool dualsense, RawPadState& s)
     return true;
 }
 
+// A wheel notch holds its binding for a few console frames so games see it.
+constexpr uint64_t kWheelHoldUs = 50'000;
+
 LRESULT CALLBACK input_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 {
     if (msg == WM_INPUT) {
@@ -167,6 +170,17 @@ void GamepadInput::set_keyboard(const KeyboardState& kb)
 {
     std::lock_guard<std::mutex> lk(mu_);
     keyboard_ = kb;
+    kb_dirty_ = true;
+}
+
+void GamepadInput::set_mouse_captured(bool on)
+{
+    if (mouse_captured_.exchange(on) == on) return;
+    std::lock_guard<std::mutex> lk(mu_);
+    mouse_.reset();
+    mouse_down_.reset();
+    wheel_release_us_[0] = wheel_release_us_[1] = 0;
+    mouse_aiming_ = false;
     kb_dirty_ = true;
 }
 
@@ -316,6 +330,10 @@ void GamepadInput::on_raw_input(void* h, uint64_t now)
     alignas(8) uint8_t buf[4096];
     if (GetRawInputData(static_cast<HRAWINPUT>(h), RID_INPUT, buf, &size, sizeof(RAWINPUTHEADER)) != size) return;
     auto* ri = reinterpret_cast<RAWINPUT*>(buf);
+    if (ri->header.dwType == RIM_TYPEMOUSE) {
+        on_mouse(&ri->data.mouse, now);
+        return;
+    }
     if (ri->header.dwType != RIM_TYPEHID) return;
 
     std::lock_guard<std::mutex> lk(mu_);
@@ -358,6 +376,43 @@ void GamepadInput::on_raw_input(void* h, uint64_t now)
     produce(now, false);
 }
 
+void GamepadInput::on_mouse(const void* rawmouse, uint64_t now)
+{
+    if (!mouse_captured_) return;
+    const auto& m = *static_cast<const RAWMOUSE*>(rawmouse);
+    std::lock_guard<std::mutex> lk(mu_);
+    if (!(m.usFlags & MOUSE_MOVE_ABSOLUTE)) mouse_.add(m.lLastX, m.lLastY);  // absolute = tablets / remote desktop
+
+    struct Button {
+        USHORT down, up;
+        unsigned vk;
+    };
+    static constexpr Button kButtons[] = {
+        {RI_MOUSE_LEFT_BUTTON_DOWN, RI_MOUSE_LEFT_BUTTON_UP, VK_LBUTTON},
+        {RI_MOUSE_RIGHT_BUTTON_DOWN, RI_MOUSE_RIGHT_BUTTON_UP, VK_RBUTTON},
+        {RI_MOUSE_MIDDLE_BUTTON_DOWN, RI_MOUSE_MIDDLE_BUTTON_UP, VK_MBUTTON},
+        {RI_MOUSE_BUTTON_4_DOWN, RI_MOUSE_BUTTON_4_UP, VK_XBUTTON1},
+        {RI_MOUSE_BUTTON_5_DOWN, RI_MOUSE_BUTTON_5_UP, VK_XBUTTON2},
+    };
+    const USHORT f = m.usButtonFlags;
+    bool changed = false;
+    for (const auto& b : kButtons) {
+        if (f & b.down) mouse_down_.set(b.vk);
+        if (f & b.up) mouse_down_.reset(b.vk);
+        changed |= (f & (b.down | b.up)) != 0;
+    }
+    if (f & RI_MOUSE_WHEEL) {
+        const auto delta = static_cast<SHORT>(m.usButtonData);
+        if (delta != 0) {
+            const int w = delta > 0 ? 0 : 1;
+            mouse_down_.set(w == 0 ? kVkWheelUp : kVkWheelDown);
+            wheel_release_us_[w] = now + kWheelHoldUs;
+            changed = true;
+        }
+    }
+    if (changed) produce(now, false);  // motion waits for the 1 kHz tick and its filter
+}
+
 void GamepadInput::produce(uint64_t now, bool force)
 {
     // Caller holds mu_.
@@ -367,7 +422,13 @@ void GamepadInput::produce(uint64_t now, bool force)
         active_id_ = d->id;
         HK_LOGI("Active controller: %s", d->name.c_str());
     }
-    proto::PadState pad = mapping_.apply(raw, keyboard_);
+    KeyboardState kb = keyboard_;
+    kb.down |= mouse_down_;
+    proto::PadState pad = mapping_.apply(raw, kb);
+    if (mouse_aiming_) {
+        pad.rx = mouse_rx_;
+        pad.ry = mouse_ry_;
+    }
     pad.buttons |= injected_.load(std::memory_order_relaxed);
 
     if (!sending_) {
@@ -423,7 +484,7 @@ void GamepadInput::run()
     HWND hwnd = CreateWindowExW(0, wc.lpszClassName, L"", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr, wc.hInstance, nullptr);
     SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
     hwnd_ = hwnd;
-    RAWINPUTDEVICE rid[2] = {};
+    RAWINPUTDEVICE rid[3] = {};
     rid[0].usUsagePage = 0x01;
     rid[0].usUsage = 0x05;  // gamepad
     rid[0].dwFlags = RIDEV_INPUTSINK;
@@ -431,6 +492,11 @@ void GamepadInput::run()
     rid[1] = rid[0];
     rid[1].usUsage = 0x04;  // joystick (DS4 reports itself as this)
     RegisterRawInputDevices(rid, 2, sizeof(RAWINPUTDEVICE));
+    // The mouse is only registered while captured: an idle registration
+    // would still wake this thread for every move anywhere on the desktop.
+    rid[2].usUsagePage = 0x01;
+    rid[2].usUsage = 0x02;
+    bool mouse_registered = false;
 
     PreciseTimer timer;
     uint64_t next_scan = 0;
@@ -442,8 +508,25 @@ void GamepadInput::run()
         MSG m;
         while (PeekMessageW(&m, nullptr, 0, 0, PM_REMOVE)) DispatchMessageW(&m);
 
+        if (mouse_captured_ != mouse_registered) {
+            mouse_registered = !mouse_registered;
+            rid[2].dwFlags = mouse_registered ? RIDEV_INPUTSINK : RIDEV_REMOVE;
+            rid[2].hwndTarget = mouse_registered ? hwnd : nullptr;
+            RegisterRawInputDevices(&rid[2], 1, sizeof(RAWINPUTDEVICE));
+        }
+
         const uint64_t now = now_us();
         std::lock_guard<std::mutex> lk(mu_);
+        const uint64_t dt = last_tick_us_ ? now - last_tick_us_ : 1000;
+        last_tick_us_ = now;
+        for (int w = 0; w < 2; ++w)
+            if (wheel_release_us_[w] && now >= wheel_release_us_[w]) {
+                mouse_down_.reset(w == 0 ? kVkWheelUp : kVkWheelDown);
+                wheel_release_us_[w] = 0;
+                kb_dirty_ = true;
+            }
+        mouse_aiming_ = mouse_captured_ && mapping_.keyboard_enabled && mapping_.mouse_aim &&
+                        mouse_.step(dt, mapping_, mouse_rx_, mouse_ry_);
         const bool full = now >= next_scan;
         if (full) next_scan = now + 1'000'000;
         poll_xinput(now, full);
@@ -458,6 +541,11 @@ void GamepadInput::run()
             last_rate_ = rate_.sample(now);
             next_rate = now + 1'000'000;
         }
+    }
+    if (mouse_registered) {
+        rid[2].dwFlags = RIDEV_REMOVE;
+        rid[2].hwndTarget = nullptr;
+        RegisterRawInputDevices(&rid[2], 1, sizeof(RAWINPUTDEVICE));
     }
     DestroyWindow(hwnd);
     hwnd_ = nullptr;
