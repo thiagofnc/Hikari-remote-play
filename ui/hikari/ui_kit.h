@@ -20,18 +20,20 @@ using Microsoft::WRL::ComPtr;
 D2D1_COLOR_F rgb(uint32_t hex, float a = 1.0f);
 
 namespace theme {
-constexpr uint32_t kBg = 0x191A1D;
-constexpr uint32_t kBg2 = 0x202226;
-constexpr uint32_t kSurface = 0x282A2F;
-constexpr uint32_t kSurface2 = 0x303339;
-constexpr uint32_t kBorder = 0x41444B;
-constexpr uint32_t kText = 0xF1F2F3;
-constexpr uint32_t kText2 = 0xB7BAC0;
-constexpr uint32_t kText3 = 0xA0A4AC;
+constexpr uint32_t kBg = 0x0E0F11;        // window canvas
+constexpr uint32_t kBg2 = 0x16171A;       // raised cards and footer bars
+constexpr uint32_t kSurface = 0x1E1F23;   // controls and fields
+constexpr uint32_t kSurface2 = 0x26282D;  // control hover
+constexpr uint32_t kBorder = 0x2B2D33;    // hairline structure
+constexpr uint32_t kBorderStrong = 0x3A3D44;  // control outlines
+constexpr uint32_t kText = 0xF3F4F6;
+constexpr uint32_t kText2 = 0xA8ACB4;
+constexpr uint32_t kText3 = 0x80858E;
 constexpr uint32_t kAccent = 0xFBBB04;   // Hikari amber (logo colour)
 constexpr uint32_t kAccentHover = 0xFFCB33;
+constexpr uint32_t kAccentDown = 0xE2A600;
 constexpr uint32_t kOnAccent = 0x1A1400;
-constexpr uint32_t kGood = 0x3DDC84;
+constexpr uint32_t kGood = 0x3DD68C;
 constexpr uint32_t kWarn = 0xF5A524;
 constexpr uint32_t kBad = 0xFF5C5C;
 constexpr uint32_t kNeonBlue = 0x00B8D9;  // Joy-Con (L)
@@ -90,6 +92,7 @@ public:
     void clear(uint32_t color);
     void background(const Rect& r);  // matte application background
     void fill(const Rect& r, D2D1_COLOR_F c, float radius = 0);
+    void fill_gradient(const Rect& r, D2D1_COLOR_F top, D2D1_COLOR_F bottom, float radius = 0);
     void stroke(const Rect& r, D2D1_COLOR_F c, float width, float radius = 0);
     void line(float x0, float y0, float x1, float y1, D2D1_COLOR_F c, float width);
     void circle(float cx, float cy, float rad, D2D1_COLOR_F c, bool filled = true, float width = 1);
@@ -97,11 +100,25 @@ public:
     void text(const std::string& utf8, const Rect& r, float size, D2D1_COLOR_F c, Weight w = Weight::Regular,
               Align h = Align::Leading, Align v = Align::Center, bool wrap = false);
     float text_width(const std::string& utf8, float size, Weight w = Weight::Regular);
+    // Monospaced data (pairing codes, addresses).
+    void mono(const std::string& utf8, const Rect& r, float size, D2D1_COLOR_F c, Align h = Align::Leading);
+
+    // Surfaces. A card is a raised, hairline-bordered working pane with a soft offset shadow.
+    void shadow(const Rect& r, float radius, float strength);
+    void card(const Rect& r, float radius = 0);
+    void footer_bar(const Rect& r);  // flat band anchored to the window bottom
+    void divider(float x0, float x1, float y);
+    void field(const Rect& r, bool focused);  // surround for a native edit control
+    void icon_tile(const Rect& r);
+    void chevron_right(float cx, float cy, D2D1_COLOR_F c);
+    void status_icon(float cx, float cy, bool ok, bool pending = false);
 
     // Widgets. Returns true when clicked this frame.
     bool button(Interaction& ui, int id, const Rect& r, const std::string& label, ButtonStyle style = ButtonStyle::Secondary,
                 bool enabled = true);
     float pill(float x, float y, const std::string& label, uint32_t dot_color, bool right_align = false);
+    // Small keycap such as the "A" in "press A"; returns its width.
+    float keycap(float x, float cy, const std::string& label);
     void spinner(float cx, float cy, float radius, D2D1_COLOR_F c);
     void progress(const Rect& r, float frac, D2D1_COLOR_F c);
     bool toggle(Interaction& ui, int id, const Rect& r, bool on);
@@ -110,7 +127,7 @@ public:
     void console(const Rect& r, uint32_t status_color, ConsoleModel model = ConsoleModel::Switch);
 
 private:
-    IDWriteTextFormat* format(float size, Weight w, Align h, Align v, bool wrap);
+    IDWriteTextFormat* format(float size, Weight w, Align h, Align v, bool wrap, int family = 0);
     ID2D1SolidColorBrush* brush(D2D1_COLOR_F c);
     void load_logo();
 
@@ -123,10 +140,14 @@ private:
     ComPtr<ID2D1SolidColorBrush> brush_;
     ComPtr<ID2D1Bitmap> logo_;
     std::map<uint64_t, ComPtr<IDWriteTextFormat>> formats_;
+    std::wstring families_[3] = {L"Segoe UI", L"Segoe UI", L"Consolas"};  // text, display, mono
     float scale_ = 1.0f;
     double time_ = 0;
 };
 
 std::wstring wide(const std::string& s);
+
+// Dark, rounded Windows 11 frame whose caption matches the canvas.
+void style_window(HWND hwnd);
 
 }  // namespace hikari::ui

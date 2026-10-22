@@ -30,10 +30,31 @@ namespace th = ui::theme;
 void menu_header(ui::Painter& p, const Rect& r, const std::string& title, const std::string& subtitle)
 {
     const float x=p.s(28), right=r.r-x;
-    p.logo({x,p.s(28),x+p.s(24),p.s(52)});
-    p.text(title,{x+p.s(38),p.s(22),right,p.s(54)},p.s(22),ui::rgb(th::kText),ui::Weight::SemiBold);
-    p.text(subtitle,{x+p.s(38),p.s(56),right,p.s(80)},p.s(13),ui::rgb(th::kText2));
-    p.line(x,p.s(100),right,p.s(100),ui::rgb(th::kBorder,0.5f),p.s(1));
+    p.logo({x,p.s(30),x+p.s(28),p.s(58)});
+    p.text(title,{x+p.s(42),p.s(24),right,p.s(54)},p.s(22),ui::rgb(th::kText),ui::Weight::SemiBold);
+    p.text(subtitle,{x+p.s(42),p.s(54),right,p.s(76)},p.s(13),ui::rgb(th::kText2));
+}
+
+// Small line icons drawn into a 44 DIP icon tile.
+void role_icon(ui::Painter& p, const Rect& tile, bool host, D2D1_COLOR_F c)
+{
+    const float w=p.s(1.5f);
+    if (host) {
+        // Stacked server units.
+        const float ix=tile.cx()-p.s(11), iy=tile.cy()-p.s(10);
+        for (int unit=0;unit<2;++unit) {
+            const float sy=iy+p.s(11*float(unit));
+            p.stroke({ix,sy,ix+p.s(22),sy+p.s(9)},c,w,p.s(2));
+            p.circle(ix+p.s(4.5f),sy+p.s(4.5f),p.s(1.2f),c);
+            p.line(ix+p.s(10),sy+p.s(4.5f),ix+p.s(17),sy+p.s(4.5f),c,w);
+        }
+    } else {
+        // A display on its stand.
+        const float ix=tile.cx()-p.s(11), iy=tile.cy()-p.s(10);
+        p.stroke({ix,iy,ix+p.s(22),iy+p.s(15)},c,w,p.s(2));
+        p.line(ix+p.s(11),iy+p.s(15),ix+p.s(11),iy+p.s(20),c,w);
+        p.line(ix+p.s(6),iy+p.s(20.5f),ix+p.s(16),iy+p.s(20.5f),c,w);
+    }
 }
 
 class RoleWindow final : public D2DWindow {
@@ -43,37 +64,27 @@ private:
     void draw(ui::Painter& p, const Rect& r) override
     {
         p.background(r);
-        const float x=p.s(28), right=r.r-x;
+        const float x=p.s(28), right=r.r-x, pitch=p.s(92);
         menu_header(p,r,"How will you use this PC?","Choose a role for this computer. You can change it later.");
-        const auto choice=[&](int id,float y,const char* title,const char* description) {
-            const Rect row{x,y,right,y+p.s(108)};
-            p.button(ui_,id,row,"",ui::ButtonStyle::Ghost);
-            p.line(x,row.b,right,row.b,ui::rgb(th::kBorder,0.5f),p.s(1));
-            const float ix=x+p.s(16), iy=y+p.s(36);
-            if (id == 1) {
-                // Host: stacked server units. Client: a display and stand.
-                for (int unit=0;unit<2;++unit) {
-                    const float sy=iy+p.s(16*float(unit));
-                    p.stroke({ix,sy,ix+p.s(28),sy+p.s(12)},ui::rgb(th::kText2),p.s(1.5f),p.s(2));
-                    p.circle(ix+p.s(5),sy+p.s(6),p.s(1.5f),ui::rgb(th::kText2));
-                    p.line(ix+p.s(12),sy+p.s(6),ix+p.s(22),sy+p.s(6),ui::rgb(th::kText2),p.s(1.5f));
-                }
-            } else {
-                p.stroke({ix,iy,ix+p.s(28),iy+p.s(20)},ui::rgb(th::kText2),p.s(1.5f),p.s(2));
-                p.line(ix+p.s(14),iy+p.s(20),ix+p.s(14),iy+p.s(27),ui::rgb(th::kText2),p.s(1.5f));
-                p.line(ix+p.s(7),iy+p.s(27),ix+p.s(21),iy+p.s(27),ui::rgb(th::kText2),p.s(1.5f));
-            }
-            p.text(title,{x+p.s(68),y+p.s(22),right-p.s(48),y+p.s(50)},p.s(17),ui::rgb(th::kText),ui::Weight::SemiBold);
-            p.text(description,{x+p.s(68),y+p.s(54),right-p.s(48),y+p.s(82)},p.s(13),ui::rgb(th::kText2));
-            const float ax=right-p.s(20), ay=row.cy();
-            p.line(ax-p.s(12),ay,ax,ay,ui::rgb(th::kText2),p.s(1.5f));
-            p.line(ax-p.s(5),ay-p.s(5),ax,ay,ui::rgb(th::kText2),p.s(1.5f));
-            p.line(ax-p.s(5),ay+p.s(5),ax,ay,ui::rgb(th::kText2),p.s(1.5f));
+        const Rect group{x,p.s(108),right,p.s(108)+pitch*2};
+        p.card(group);
+        p.divider(group.l+p.s(1),group.r-p.s(1),group.t+pitch);
+        const auto choice=[&](int id,float y,bool host,const char* title,const char* description) {
+            const Rect row{group.l,y,group.r,y+pitch};
+            p.button(ui_,id,row.inset(p.s(6)),"",ui::ButtonStyle::Ghost);
+            const bool hover=ui_.hovered(id,row.inset(p.s(6)));
+            const Rect tile{row.l+p.s(20),row.cy()-p.s(22),row.l+p.s(64),row.cy()+p.s(22)};
+            p.icon_tile(tile);
+            role_icon(p,tile,host,ui::rgb(hover?th::kAccent:th::kText));
+            p.text(title,{row.l+p.s(82),row.cy()-p.s(22),row.r-p.s(56),row.cy()-p.s(1)},p.s(15),ui::rgb(th::kText),ui::Weight::SemiBold);
+            p.text(description,{row.l+p.s(82),row.cy()+p.s(1),row.r-p.s(56),row.cy()+p.s(22)},p.s(13),ui::rgb(th::kText2));
+            p.chevron_right(row.r-p.s(28),row.cy(),ui::rgb(hover?th::kText:th::kText3));
         };
-        choice(1,p.s(124),"Host","Your Switch and capture hardware connect to this PC.");
-        choice(2,p.s(244),"Client","Connect to your host PC to play remotely.");
-        p.text("Saved on this PC. Switch anytime with Change role.",{x,p.s(396),right,p.s(430)},p.s(12),ui::rgb(th::kText3));
-
+        choice(1,group.t,true,"Host","Your Switch and capture hardware connect to this PC.");
+        choice(2,group.t+pitch,false,"Client","Connect to your host PC to play remotely.");
+        const Rect footer{r.l,r.b-p.s(56),r.r,r.b};
+        p.footer_bar(footer);
+        p.text("Saved on this PC. Switch anytime with Change role.",{x,footer.t,right,footer.b},p.s(12),ui::rgb(th::kText3));
     }
     void on_action(int id) override { role = id == 1 ? "host" : "client"; close(); }
     void on_key(UINT key) override { if (key == VK_ESCAPE) close(); }
@@ -597,9 +608,10 @@ int run_preview(const std::string& screen)
     cfg.set("client", "host_name", "Living room");
     cfg.set("client", "pairing_code", "DEMO-CODE-ONLY");
     cfg.set_bool("client", "fullscreen", false);
+    cfg.set("client", "console_model", "switch");  // previews start from Switch; switch2 previews select it explicitly
     if (screen == "setup") {
         RoleWindow window;
-        if (!window.create(L"Hikari - Setup preview", 680, 454)) return 1;
+        if (!window.create(L"Hikari - Setup preview", 680, 400)) return 1;
         window.run_modal();
         return 0;
     }
@@ -634,7 +646,7 @@ int run_preview(const std::string& screen)
         show_controller_settings(nullptr, cfg, mapping, deps);
         return 0;
     }
-    if (screen != "switch2" && screen != "connection-needed" && screen != "ready" && screen != "ready-compact" && screen != "asleep" && screen != "waking" && screen != "failed" && screen != "stream")
+    if (screen != "switch2" && screen != "connection-needed" && screen != "ready" && screen != "ready-compact" && screen != "asleep" && screen != "waking" && screen != "failed" && screen != "stream" && screen != "stream-menu" && screen != "stream-end" && screen != "ended")
         return 2;
     ClientApp client;
     ClientHooks hooks;
@@ -676,7 +688,7 @@ int run(const std::vector<std::string>& args)
     }
     if (selftest) {
         RoleWindow window;
-        if (!window.create(L"Hikari self-test", 680, 454)) return 1;
+        if (!window.create(L"Hikari self-test", 680, 400)) return 1;
         // Exercise the real rendering and embedded resources without saving settings.
         SendMessageW(window.hwnd(), WM_PAINT, 0, 0);
         window.close();
@@ -685,7 +697,7 @@ int run(const std::vector<std::string>& args)
     for (;;) {
         if (setup || (role != "host" && role != "client")) {
             RoleWindow chooser;
-            if (!chooser.create(L"Welcome to Hikari", 680, 454)) return 1;
+            if (!chooser.create(L"Welcome to Hikari", 680, 400)) return 1;
             chooser.run_modal();
             if (chooser.role.empty()) return 0;
             role = chooser.role;
@@ -699,7 +711,7 @@ int run(const std::vector<std::string>& args)
         std::string next_role;
         const auto change_role = [&](HWND owner) {
             RoleWindow chooser;
-            if (!chooser.create(L"Hikari - Change role", 680, 454, owner)) return false;
+            if (!chooser.create(L"Hikari - Change role", 680, 400, owner)) return false;
             chooser.run_modal();
             if (chooser.role.empty() || chooser.role == role) return false;
             next_role = chooser.role;

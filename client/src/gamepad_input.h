@@ -49,6 +49,8 @@ public:
     void pin_device(const std::string& name);  // "" = automatic
     void mark_next_latency();          // tag the next sent state for glass-to-glass tests
     void set_injected(uint32_t buttons) { injected_ = buttons; }  // hotkeys (F8 = HOME, F9 = Capture)
+    // Called once each time Minus + Plus are held together for a second (stream menu).
+    void set_menu_chord(std::function<void()> cb) { menu_chord_ = std::move(cb); }
 
     RawPadState raw();                 // active device (for the settings preview)
     std::vector<std::string> devices();
@@ -107,6 +109,10 @@ private:
 
     proto::PadState last_sent_;
     proto::PadState last_nav_;
+    bool resync_nav_ = false;
+    std::function<void()> menu_chord_;
+    uint64_t chord_since_ = 0;
+    bool chord_fired_ = false;
     uint32_t seq_ = 0;
     uint64_t last_send_us_ = 0;
     uint64_t redundant_at_ = 0;
