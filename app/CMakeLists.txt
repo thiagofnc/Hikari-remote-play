@@ -1,1 +1,6 @@
-# placeholder
+enable_language(RC)
+add_executable(Hikari WIN32 main.cpp d2d_window.cpp hikari.rc)
+target_link_libraries(Hikari PRIVATE hikari_client hikari_host shell32)
+if(MINGW)
+    target_link_options(Hikari PRIVATE -municode)
+endif()

@@ -1,0 +1,4 @@
+#include <windows.h>
+1 ICON "../assets/hikari.ico"
+101 RCDATA "../assets/hikari_logo_256.png"
+1 RT_MANIFEST "hikari.manifest"
