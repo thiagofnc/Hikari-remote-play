@@ -36,3 +36,7 @@ Existing app implementation, local builds and tests, and the actual UI screensho
 - Keep control mappings understandable and interactive.
 - Keep visual styling out of the real-time data path.
 - Clearly distinguish preview data from live device state.
+
+## Switch 2 Controller Artwork
+
+The user supplied four Switch 2 Joy-Con views on 2026-10-22. Use the original front artwork and an exact mirrored left/right shoulder pair, with cyan left, coral right and readable side-specific labels. Preserve the supplied source files. The shoulder base is a label-free edit of the supplied left view; reflection, palette and labels are applied by the native renderer. The current wired profile has no C input mapping.

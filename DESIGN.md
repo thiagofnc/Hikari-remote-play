@@ -212,6 +212,16 @@ Bindings connect directly to the supplied image. Hovering a diagram control or m
 
 `assets/joycon-reference.png` is decoded once from embedded resource 102. The renderer draws front source rectangles `(28,193,182,620)` and `(1018,193,1172,620)`, plus top views `(28,18,180,138)` and `(1020,18,1172,138)`. The artwork is scaled uniformly into its available area with linear interpolation. Hit tests use the same transform. Amber paths and circles are separate runtime overlays: do not bake them into the original bitmap or replace the supplied image with generated art. Provenance is recorded alongside the source image in `assets/joycon-reference.png.json`.
 
+### Switch 2 Controller Artwork
+
+The Switch 2 controller screen extends the existing mapping pane, typography, capture states and footer without changing global tokens. `assets/joycon2-left.png`, `joycon2-right.png`, `joycon2-left-top.png` and `joycon2-right-top.png` are the four user-supplied sources, retained with adjacent provenance JSON. Front images preserve original pixels: resources 103 and 104 use source rectangles `(254,52)-(783,1423)` and `(320,66)-(807,1406)`, drawn into `(0,0)-(164.7,427)` and `(190,0)-(345.2,427)` on the shared diagram canvas.
+
+The user approved an exact mirrored shoulder pair. `assets/joycon2-shoulder-base.png` is an explicitly authorized image-tool derivative of the supplied left top view: only printed ZL/L labels were removed. Its adjacent JSON retains origin and editing prompt. Resource 107 supplies this same transparent base twice; source rectangle `(354,214)-(1274,845)` maps to `(0,-140)-(164,-27.5)`. The right view reflects geometry with `x -> 344-x` and converts cyan connector pixels to coral while preserving alpha and grayscale shading. ZL/L and ZR/R are drawn afterward in their readable orientations, outside the reflection. The original supplied top files remain preserved references. This narrow approved derivative does not authorize replacement of the supplied front artwork or the unchanged Switch 1 atlas.
+
+Switch 2 has its own measured control centers, including sticks at `(70.1,124)` and `(282.1,218.6)`, A at `(312.7,112.8)`, and Home at `(257.9,290.3)`. Drawing and hit tests share the model, scale and transform for the 26 current mapped inputs. The visible C button is artwork only: the current wired profile has no C mapping. Do not imply it is interactive.
+
+Offline previews `controller-switch2` and `controller-switch2-compact` select this model explicitly; the Controller action in the Switch 2 lobby preview passes the same model. This is preview routing, not automatic connected-console identification or a new model selector. Live model identity remains unavailable. Fresh rendered evidence is `artifacts/ui-review/controller-switch2/standard.png`, `compact.png` and `binding-a.png`; the latter shows exact A-to-binding capture feedback. Source provenance and the original Switch 1 implementation remain intact.
+
 ## Do's and Don'ts
 
 ### Do:

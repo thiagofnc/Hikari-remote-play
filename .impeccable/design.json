@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-22T03:42:27.390142+00:00",
+  "generatedAt": "2026-10-22T04:20:44.800489+00:00",
   "title": "Design System: Hikari",
   "extensions": {
     "colorMeta": {
@@ -315,10 +315,56 @@
       "variants": "Switch cyan/coral grips; Switch2 #444A50 graphite grips with the same fill geometry and #353A3F caps as Switch, cyan/coral stick rings and C button. Shared identical taller dock, no extra rounded inner grip outline. Screen always blank black. Flat status LED.",
       "layout": "Session art width clamp(inner width * 0.44,174,300) DIP; text ends 20 DIP before artwork. Progress collapses to current step below 330 DIP text width.",
       "availability": "Switch2 sample via --preview=switch2. Live fallback Switch; no selector or automatic model identification. Generic bridge reports USB readiness only.",
-      "controllerBoundary": "Interactive supplied Joy-Con artwork unchanged.",
+      "controllerBoundary": "Switch1 interactive supplied atlas unchanged. Switch2 has separate supplied front views and an approved derived mirrored shoulder pair; see nativeControllerSwitch2.",
       "evidence": "Current ui/ui_kit.cpp and ui/hikari/ui_kit.h confirm whole-console +8 Y layer, fixed dock and always-black screen. Validated fresh captures artifacts/ui-review/console/switch.png and artifacts/ui-review/console/switch2.png with corresponding panel crops show the final lowered console and blank screens.",
       "layerOffset": "Entire console layer (tablet, display, Joy-Cons and all controls) translated +8 units in Y. Restore original transform before unchanged fixed dock. Control centers in this metadata are pre-translation local coordinates.",
       "screen": "Both models always blank #090B0D at local (15,4)-(85,44), including ready sessions. No on-screen Hikari mark; console API no longer has a screen-on parameter."
+    },
+    "nativeControllerSwitch2": {
+      "sources": [
+        "assets/joycon2-left.png",
+        "assets/joycon2-right.png",
+        "assets/joycon2-left-top.png",
+        "assets/joycon2-right-top.png"
+      ],
+      "provenance": "Original sources preserved with adjacent .png.json. assets/joycon2-shoulder-base.png is an approved label-removal image-tool derivative with origin and exact prompt in its sidecar.",
+      "frontCrops": {
+        "resource103": "source(254,52)-(783,1423) -> target(0,0)-(164.7,427)",
+        "resource104": "source(320,66)-(807,1406) -> target(190,0)-(345.2,427)"
+      },
+      "shoulder": "Resource107 shared twice; source(354,214)-(1274,845) -> target(0,-140)-(164,-27.5). Right geometry reflects x ->344-x; cyan palette changes to coral preserving alpha/grayscale. Correct ZL/L and ZR/R labels drawn afterward unmirrored.",
+      "controlCenters": {
+        "leftStick": [
+          70.1,
+          124
+        ],
+        "rightStick": [
+          282.1,
+          218.6
+        ],
+        "A": [
+          312.7,
+          112.8
+        ],
+        "Home": [
+          257.9,
+          290.3
+        ]
+      },
+      "interaction": "26 current mapped inputs use the same model-specific drawing/hit-test transform. Visible C artwork has no mapping in current wired profile.",
+      "routing": "Offline --preview=controller-switch2 / controller-switch2-compact; Switch2 lobby preview Controller action passes model. No automatic console identity or model selector.",
+      "systemBoundary": "Existing tokens, mapping pane geometry, typography, states, footer and Switch1 atlas unchanged.",
+      "evidence": [
+        "client/src/joycon_art.cpp",
+        "client/src/joycon_art.h",
+        "client/src/controller_settings.h",
+        "client/src/controller_settings.cpp",
+        "app/main.cpp",
+        "client/src/client_app.cpp",
+        "artifacts/ui-review/controller-switch2/standard.png",
+        "artifacts/ui-review/controller-switch2/compact.png",
+        "artifacts/ui-review/controller-switch2/binding-a.png"
+      ]
     }
   },
   "components": [

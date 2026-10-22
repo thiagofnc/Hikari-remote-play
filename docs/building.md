@@ -105,9 +105,11 @@ Open screens without another computer, capture card or controller bridge:
 .\scripts\preview.ps1 -Screen controller
 ```
 
-Screens: `setup`, `connection`, `host`, `controller`, `controller-compact`, `ready`, `ready-compact`, `connection-needed`, `switch2`, `asleep`, `waking`, `failed`, `stream`. Use `-BuildDir` for a different build directory, or run `Hikari.exe --preview=ready` directly. Preview mode uses the real UI with sample state, starts no streaming/network/device services, and keeps any saved preview settings separate in `%LOCALAPPDATA%\Hikari\preview`. In the lobby, Play opens the stream-overlay preview; Ctrl+Alt+Q returns to the lobby. The stream preview has no game video or measured telemetry.
+Screens: `setup`, `connection`, `host`, `controller`, `controller-compact`, `controller-switch2`, `controller-switch2-compact`, `ready`, `ready-compact`, `connection-needed`, `switch2`, `asleep`, `waking`, `failed`, `stream`. Use `-BuildDir` for a different build directory, or run `Hikari.exe --preview=ready` directly. Preview mode uses the real UI with sample state, starts no streaming/network/device services, and keeps any saved preview settings separate in `%LOCALAPPDATA%\Hikari\preview`. In the lobby, Play opens the stream-overlay preview; Ctrl+Alt+Q returns to the lobby. The stream preview has no game video or measured telemetry.
 
 `switch2` shows the Switch 2 artwork with sample state. Both console illustrations keep their screens off. The bridge currently reports USB readiness rather than console identity; this preview does not imply automatic model detection.
+
+The Switch 2 controller preview uses the supplied front/top artwork. Its C button is visible but has no mapping in the current bridge profile. Opening Controller from the Switch 2 lobby preview uses this same variant; automatic live model identification is still unavailable.
 
 ### Fuzzing the link parser
 

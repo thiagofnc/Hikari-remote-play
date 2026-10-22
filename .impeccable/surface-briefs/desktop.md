@@ -15,3 +15,5 @@ FIRST VIEWPORT: User rejected the sparse first-round setup, pairing, lobby and h
 FORM: User-pinned direction confirmed in conversation overrides assignment. Code-led native app. seed:31b8d774e5c48128. Signature: diagram-to-binding selection and live input feedback; motion only for state.
 
 FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance
+
+Controller extension: Switch 2 uses supplied front images and a shared shoulder silhouette, reflected for the right side with coral rather than cyan and correct R/ZR labels. Both shoulder views share bounds and transforms. Switch 1 remains unchanged.
