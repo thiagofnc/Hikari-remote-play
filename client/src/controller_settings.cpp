@@ -1218,41 +1218,41 @@ void SettingsWindow::chevron(float cx, float cy, float size, bool up, const D2D1
 
 void SettingsWindow::button(const D2D1_RECT_F& r, const wchar_t* label, Hit h, BtnStyle style, bool enabled)
 {
+    // Flat button colours, kept from the original graphite palette.
+    constexpr uint32_t kButton = 0x282A2F, kButtonHover = 0x303339, kButtonBorder = 0x41444B;
     const bool hov = enabled && hover_ == h;
     const bool down = hov && pressed_ == h;
-    D2D1_COLOR_F fg;
-    if (!enabled) {
-        fill_rr(r, 8, col(kControl, 0.5f));
-        stroke_rr(r, 8, col(kControlBorder, 0.5f), 1.0f);
-        fg = col(kText3);
-    } else if (style == BtnStyle::Primary) {
-        if (!down) shadow(r, 8, 0.30f);
-        if (down) fill_rr(r, 8, col(ui::theme::kAccentDown));
-        else fill_gradient(r, 8, col(hov ? 0xFFD452 : 0xFFC52A), col(hov ? 0xFFC21A : kAmber));
-        stroke_rr(r, 8, col(0x000000, 0.22f), 1.0f);
-        if (!down) highlight(r, 8, 0.38f);
-        fg = col(kInk);
-    } else if (style == BtnStyle::Danger) {
-        fill_rr(r, 8, col(ui::theme::kBad, down ? 0.30f : hov ? 0.22f : 0.12f));
-        stroke_rr(r, 8, col(ui::theme::kBad, 0.35f), 1.0f);
+    D2D1_COLOR_F bg, fg, border = col(kButtonBorder);
+    switch (style) {
+    case BtnStyle::Primary:
+        bg = col(down ? 0xE0A800 : hov ? 0xFFC933 : kAmber);
+        fg = col(0x1E2127);
+        border = bg;
+        break;
+    case BtnStyle::Danger:
+        bg = col(down ? 0x5A2E2C : hov ? 0x4A2A2A : kButton);
         fg = col(kDanger);
-    } else {
-        if (down) fill_rr(r, 8, col(0x1B1C20));
-        else fill_gradient(r, 8, col(hov ? 0x2D2F35 : 0x25272C), col(hov ? 0x26282D : 0x1F2024));
-        stroke_rr(r, 8, col(hov ? kControlBorderHover : kControlBorder), 1.0f);
-        if (!down) highlight(r, 8, 0.05f);
+        break;
+    default:
+        bg = col(down ? 0x30353D : hov ? kButtonHover : kButton);
         fg = col(kText);
+        break;
     }
-    text(label, down ? D2D1_RECT_F{r.left, r.top + 1, r.right, r.bottom + 1} : r, f_body_sb_.Get(), fg, DWRITE_TEXT_ALIGNMENT_CENTER);
+    if (!enabled) {
+        bg = col(kButton, 0.6f);
+        fg = col(kText3);
+        border = col(kButtonBorder, 0.6f);
+    }
+    fill_rr(r, 8, bg);
+    stroke_rr(r, 8, border, 1.0f);
+    text(label, r, f_body_sb_.Get(), fg, DWRITE_TEXT_ALIGNMENT_CENTER);
 }
 
 void SettingsWindow::dropdown(const D2D1_RECT_F& r, const std::wstring& value, Hit h, bool open)
 {
     const bool hov = hover_ == h;
-    if (open) fill_rr({r.left - 3, r.top - 3, r.right + 3, r.bottom + 3}, 11, col(kAmber, 0.16f));
-    fill_gradient(r, 8, col(hov || open ? 0x2D2F35 : 0x25272C), col(hov || open ? 0x26282D : 0x1F2024));
-    stroke_rr(r, 8, open ? col(kAmber) : col(hov ? kControlBorderHover : kControlBorder), 1.0f);
-    if (!open) highlight(r, 8, 0.05f);
+    fill_rr(r, 8, col(hov || open ? 0x303339 : 0x282A2F));
+    stroke_rr(r, 8, open ? col(kAmber) : col(0x41444B), open ? 1.5f : 1.0f);
     text(value, {r.left + 12, r.top, r.right - 34, r.bottom}, f_body_.Get(), col(kText));
     chevron(r.right - 18, (r.top + r.bottom) * 0.5f, 4.5f, open, col(kText2));
 }

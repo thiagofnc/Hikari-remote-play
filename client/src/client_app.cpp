@@ -131,8 +131,11 @@ void ClientApp::preview_state(const std::string& state)
         status_.issue = proto::HostIssue::NoSignal;
         std::snprintf(status_.message, sizeof(status_.message), "No HDMI signal. Check the dock and HDMI cable, then try again.");
     }
-    screen_ = state == "stream" ? Screen::Stream : Screen::Lobby;
+    screen_ = state == "stream" || state == "stream-clean" ? Screen::Stream : Screen::Lobby;
     show_stats_ = state == "stream";
+    for (int i = 0; i < 120; ++i)  // sample latency trace for the offline stats preview
+        e2e_spark_[i] = 34.0f + 3.5f * std::sin(i * 0.31f) + 1.8f * std::sin(i * 1.7f) + (i % 37 == 0 ? 9.0f : 0.0f);
+    spark_pos_ = 0;
 }
 
 int ClientApp::run(Config& cfg, ClientHooks hooks)
@@ -258,7 +261,7 @@ void ClientApp::set_screen(Screen s)
 {
     if (screen_.exchange(s) == s) return;
     if (s == Screen::Stream) {
-        toast("Ctrl+Alt+Q  back to Hikari     F1  stats     F11  fullscreen", 4.0);
+        toast("Move the mouse for stream controls  \xC2\xB7  Ctrl+Alt+Q ends the stream", 4.0);
         last_mouse_move_us_ = now_us();
     }
     update_sending();
@@ -275,6 +278,7 @@ void ClientApp::do_action(int action)
     if (!hooks_.preview.empty()) {
         if (action == kActPlay || action == kActRetry) { preview_state("stream"); return; }
         if (action == kActStop) { preview_state("ready"); return; }
+        if (action == kActScreenshot) { toast("Screenshots need live video"); return; }
     }
     switch (action) {
     case kActPlay:
@@ -324,6 +328,8 @@ void ClientApp::do_action(int action)
         break;
     }
     case kActFullscreen: toggle_fullscreen(); break;
+    case kActStats: show_stats_ = !show_stats_; break;
+    case kActScreenshot: screenshot_ = true; break;
     default: break;
     }
 }
@@ -466,6 +472,15 @@ LRESULT ClientApp::handle_message(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         ui_.mouse_x = ui_.mouse_y = -1;
         return 0;
     }
+    case WM_LBUTTONDBLCLK:
+        if (screen_ == Screen::Stream) {
+            std::lock_guard<std::mutex> lk(mu_);
+            if (ui_.hit(static_cast<float>(GET_X_LPARAM(lp)), static_cast<float>(GET_Y_LPARAM(lp))) < 0) {
+                PostMessageW(hwnd, WM_HIKARI_ACTION, kActFullscreen, 0);
+                return 0;
+            }
+        }
+        [[fallthrough]];
     case WM_LBUTTONDOWN: {
         std::lock_guard<std::mutex> lk(mu_);
         ui_.mouse_down = true;
@@ -483,9 +498,6 @@ LRESULT ClientApp::handle_message(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         ReleaseCapture();
         return 0;
     }
-    case WM_LBUTTONDBLCLK:
-        if (screen_ == Screen::Stream) toggle_fullscreen();
-        return 0;
     case WM_SETCURSOR:
         if (LOWORD(lp) == HTCLIENT && screen_ == Screen::Stream && now_us() - last_mouse_move_us_ > 2'000'000) {
             SetCursor(nullptr);
@@ -617,7 +629,9 @@ void ClientApp::render_thread()
             std::lock_guard<std::mutex> lk(mu_);
             toast_until = toast_until_;
         }
-        const bool overlay_live = !hooks_.preview.empty() || show_stats_ || now_s() < toast_until || net_.state() != ConnState::Connected;
+        // The toolbar redraws only while the mouse is active, so idle play keeps the bare video path.
+        const bool overlay_live = !hooks_.preview.empty() || show_stats_ || now_s() < toast_until ||
+                                  net_.state() != ConnState::Connected || stream_toolbar_visible();
 
         if (streaming) {
             if (fresh || (overlay_live && now - last_render > 50'000)) {
@@ -696,37 +710,31 @@ void ClientApp::draw_lobby(ui::Painter& p, const Rect& r)
 
     const Rect status_bar{r.l,r.b-p.s(36),r.r,r.b};
     const float split = m+(r.w()-m*3)*0.62f, side=split+m;
-    const float top=p.s(96), bottom=status_bar.t-p.s(20), session_bottom=top+p.s(228);
-    const Rect session{m,top,split,session_bottom};
-    p.card(session);
-    const float x=m+p.s(24), inner=split-p.s(24);
+    const float top=p.s(100), bottom=status_bar.t-p.s(20), session_bottom=top+p.s(220);
+    p.card({m,top,split,session_bottom});
+    const float x=m+p.s(22), inner=split-p.s(22);
     const bool awake=have && st.console==ConsoleState::Ready;
     const std::string host=have && st.host_name[0] ? st.host_name : host_label_;
-    // The console sits on a recessed stage at the right of the session card.
-    const float art_width=std::clamp((inner-x)*0.44f,p.s(174),p.s(300));
-    const Rect stage{split-p.s(12)-art_width,top+p.s(12),split-p.s(12),session_bottom-p.s(12)};
-    p.fill(stage,ui::rgb(th::kBg,0.7f),p.s(9));
-    p.stroke(stage,ui::rgb(0xFFFFFF,0.04f),p.s(1),p.s(9));
-    const float text_right=stage.l-p.s(20);
+    // The console sits slightly in from the card edge.
+    const float art_width=std::clamp((inner-x)*0.44f,p.s(174),p.s(300)), art_right=inner-p.s(24);
+    const float text_right=art_right-art_width-p.s(20);
     const bool switch2_preview=hooks_.preview=="switch2";
     const std::string console_name=switch2_preview?"Switch 2":"Switch";
-    p.text(host.empty()?"Your "+console_name:host+"'s "+console_name,{x,top+p.s(22),text_right,top+p.s(50)},p.s(20),ui::rgb(th::kText),Weight::SemiBold);
+    p.text(host.empty()?"Your "+console_name:host+"'s "+console_name,{x,top+p.s(18),text_right,top+p.s(48)},p.s(18),ui::rgb(th::kText),Weight::SemiBold);
     std::string state="Waiting for the host";
-    uint32_t state_color=th::kText3;
     if(have) switch(st.console) {
-    case ConsoleState::Ready: state="Ready to play"; state_color=th::kGood; break;
-    case ConsoleState::Asleep: state="Asleep. Play will wake your console."; state_color=th::kWarn; break;
-    case ConsoleState::Off: state="Off or undocked"; state_color=th::kWarn; break;
-    case ConsoleState::Waking: state="Waking your console"; state_color=th::kAccent; break;
-    case ConsoleState::AwakeNoVideo: state="Waiting for an HDMI signal"; state_color=th::kWarn; break;
+    case ConsoleState::Ready: state="Ready to play"; break;
+    case ConsoleState::Asleep: state="Asleep. Play will wake your console."; break;
+    case ConsoleState::Off: state="Off or undocked"; break;
+    case ConsoleState::Waking: state="Waking your console"; break;
+    case ConsoleState::AwakeNoVideo: state="Waiting for an HDMI signal"; break;
     default: state="Checking your console"; break;
     }
-    p.circle(x+p.s(4),top+p.s(64),p.s(3.5f),ui::rgb(state_color));
-    p.text(state,{x+p.s(16),top+p.s(54),text_right,top+p.s(92)},p.s(13),ui::rgb(th::kText2),Weight::Regular,Align::Leading,Align::Leading,true);
-    p.console(stage.inset(p.s(14),p.s(12)),awake?th::kGood:th::kWarn,
+    p.text(state,{x,top+p.s(52),text_right,top+p.s(92)},p.s(13),ui::rgb(th::kText2),Weight::Regular,Align::Leading,Align::Leading,true);
+    p.console({art_right-art_width,top+p.s(18),art_right,session_bottom-p.s(18)},awake?th::kGood:th::kWarn,
               switch2_preview?ui::ConsoleModel::Switch2:ui::ConsoleModel::Switch);
     const bool progress=have && st.phase!=SessionPhase::Lobby && st.phase!=SessionPhase::Failed;
-    float y=top+p.s(104);
+    float y=top+p.s(100);
     if(progress) {
         const int current=st.phase==SessionPhase::Waking?0:st.phase==SessionPhase::WaitingForVideo?1:st.phase==SessionPhase::WaitingForController?2:3;
         const char* steps[]={"Wake","Picture","Controller","Stream"};
@@ -734,14 +742,13 @@ void ClientApp::draw_lobby(ui::Painter& p, const Rect& r)
         const bool compact_steps=text_right-x<p.s(330);
         if(compact_steps) {
             p.spinner(x+p.s(8),y+p.s(10),p.s(7),ui::rgb(th::kAccent));
-            p.text(steps[current],{x+p.s(24),y,text_right,y+p.s(24)},p.s(13),ui::rgb(th::kText),Weight::Medium);
+            p.text(steps[current],{x+p.s(24),y,text_right,y+p.s(24)},p.s(13),ui::rgb(th::kText));
         } else for(int i=0;i<4;++i) {
             const float cx=x+step*i+p.s(8);
-            if(i<3) p.line(cx+p.s(12),y+p.s(8),cx+step-p.s(12),y+p.s(8),ui::rgb(i<current?th::kAccent:th::kBorderStrong),p.s(1.5f));
+            if(i<3) p.line(cx+p.s(12),y+p.s(8),cx+step-p.s(12),y+p.s(8),ui::rgb(i<current?th::kAccent:th::kBorderStrong),p.s(1));
             if(i==current) p.spinner(cx,y+p.s(8),p.s(7),ui::rgb(th::kAccent));
-            else if(i<current) p.circle(cx,y+p.s(8),p.s(4.5f),ui::rgb(th::kAccent));
-            else p.circle(cx,y+p.s(8),p.s(4),ui::rgb(th::kBorderStrong),false,p.s(1.5f));
-            p.text(steps[i],{cx-p.s(8),y+p.s(21),cx+step-p.s(10),y+p.s(40)},p.s(11.5f),ui::rgb(i<=current?th::kText:th::kText3),i==current?Weight::Medium:Weight::Regular);
+            else p.circle(cx,y+p.s(8),p.s(4),ui::rgb(i<current?th::kAccent:th::kBorderStrong));
+            p.text(steps[i],{cx-p.s(8),y+p.s(21),cx+step-p.s(10),y+p.s(40)},p.s(11),ui::rgb(i<=current?th::kText:th::kText3));
         }
         const float message_y=y+p.s(compact_steps?28:42);
         p.text(st.message[0]?st.message:proto::to_string(st.phase),{x,message_y,text_right,message_y+p.s(30)},p.s(12),ui::rgb(th::kText2),Weight::Regular,Align::Leading,Align::Leading,true);
@@ -753,48 +760,43 @@ void ClientApp::draw_lobby(ui::Painter& p, const Rect& r)
         const int action=setup?kActSettings:failed?kActRetry:kActPlay;
         if (ui_.focus_id < 0) ui_.focus_id=action;
         if(failed) {
-            p.text(st.message[0]?st.message:"Could not start the session",{x,y-p.s(14),text_right,y+p.s(32)},p.s(13),ui::rgb(th::kBad),Weight::Medium,Align::Leading,Align::Center,true);
+            p.text(st.message[0]?st.message:"Could not start the session",{x,y-p.s(12),text_right,y+p.s(34)},p.s(13),ui::rgb(th::kBad),Weight::Regular,Align::Leading,Align::Center,true);
             y+=p.s(40);
         }
-        if(p.button(ui_,action,{x,y,x+p.s(164),y+p.s(40)},setup?"Set up connection":failed?"Try again":"Play",ButtonStyle::Primary,setup||have)) post_action(action);
-        const Rect hint{x,y+p.s(50),text_right,y+p.s(72)};
+        if(p.button(ui_,action,{x,y,x+p.s(164),y+p.s(38)},setup?"Set up connection":failed?"Try again":"Play",ButtonStyle::Primary,setup||have)) post_action(action);
         if(have && !setup && !failed) {
-            // "Or press [A] on your controller." with a drawn keycap.
+            // "Or press [A] on your controller." with a drawn button cap.
+            const Rect hint{x,y+p.s(46),text_right,y+p.s(64)};
             const float lead=p.text_width("Or press",p.s(12));
             p.text("Or press",hint,p.s(12),ui::rgb(th::kText3));
-            const float kw=p.keycap(hint.l+lead+p.s(6),hint.cy(),"A");
-            p.text("on your controller.",{hint.l+lead+kw+p.s(12),hint.t,hint.r,hint.b},p.s(12),ui::rgb(th::kText3));
+            const float kw=p.keycap(hint.l+lead+p.s(5),hint.cy(),"A");
+            p.text("on your controller.",{hint.l+lead+kw+p.s(10),hint.t,hint.r,hint.b},p.s(12),ui::rgb(th::kText3));
         } else {
             p.text(setup?"Enter your host address and pairing code.":failed?"Check the host, then retry.":"Keep the host app running on your other PC.",
-                   {hint.l,hint.t,hint.r,hint.b+p.s(12)},p.s(12),ui::rgb(th::kText3),Weight::Regular,Align::Leading,Align::Leading,true);
+                   {x,y+p.s(46),text_right,y+p.s(80)},p.s(12),ui::rgb(th::kText3),Weight::Regular,Align::Leading,Align::Leading,true);
         }
         if(have && !failed && st.issue!=proto::HostIssue::None)
-            p.text(proto::to_string(st.issue),{x,y+p.s(78),text_right,y+p.s(100)},p.s(12),ui::rgb(th::kWarn));
+            p.text(proto::to_string(st.issue),{x,y+p.s(82),text_right,y+p.s(106)},p.s(12),ui::rgb(th::kWarn));
     }
 
-    const Rect prefs{m,session_bottom+p.s(16),split,bottom};
-    p.card(prefs);
-    p.text("Stream preference",{x,prefs.t+p.s(18),inner,prefs.t+p.s(44)},p.s(15),ui::rgb(th::kText),Weight::SemiBold);
+    const float prefs=session_bottom+p.s(16), row_start=prefs+p.s(60);
+    p.card({m,prefs,split,bottom});
+    p.text("Stream preference",{x,prefs+p.s(16),inner,prefs+p.s(42)},p.s(15),ui::rgb(th::kText),Weight::SemiBold);
     const char* names[]={"Minimum latency","Balanced","Quality"};
     const char* descriptions[]={"Prioritize response time.","Balance responsiveness and picture quality.","Prioritize picture quality."};
-    const float row_start=prefs.t+p.s(54);
-    const float pitch=std::min(p.s(62),(prefs.b-row_start-p.s(10))/3);
+    const float pitch=std::min(p.s(64),(bottom-row_start-p.s(16))/3);
     for(int i=0;i<3;++i) {
-        const Rect row{prefs.l+p.s(10),row_start+pitch*i,prefs.r-p.s(10),row_start+pitch*(i+1)-p.s(4)};
+        const Rect row{x-p.s(6),row_start+pitch*i,inner+p.s(6),row_start+pitch*(i+1)-p.s(4)};
         const bool selected=static_cast<int>(preset_.load())==i;
         if(p.button(ui_,kActPresetLatency+i,row,"",selected?ButtonStyle::Secondary:ButtonStyle::Ghost)) post_action(kActPresetLatency+i);
-        const float cx=x+p.s(8),cy=row.cy();
-        if(selected) {
-            p.circle(cx,cy,p.s(8),ui::rgb(th::kAccent));
-            p.circle(cx,cy,p.s(3),ui::rgb(th::kOnAccent));
-        } else {
-            p.circle(cx,cy,p.s(7.5f),ui::rgb(th::kBorderStrong),false,p.s(1.5f));
-        }
+        const float cx=x+p.s(12),cy=row.cy();
+        p.circle(cx,cy,p.s(7),ui::rgb(selected?th::kAccent:0xA0A4AC),false,p.s(1));
+        if(selected) p.circle(cx,cy,p.s(3),ui::rgb(th::kAccent));
         if(pitch<p.s(48)) {
-            p.text(names[i],{x+p.s(28),row.t,inner,row.b},p.s(13),ui::rgb(th::kText),Weight::Medium);
+            p.text(names[i],{x+p.s(32),row.t,inner,row.b},p.s(13),ui::rgb(th::kText),Weight::Medium);
         } else {
-            p.text(names[i],{x+p.s(28),row.t+p.s(4),inner,row.cy()+p.s(1)},p.s(13.5f),ui::rgb(th::kText),Weight::Medium);
-            p.text(descriptions[i],{x+p.s(28),row.cy()+p.s(1),inner,row.b-p.s(4)},p.s(12),ui::rgb(th::kText2));
+            p.text(names[i],{x+p.s(32),row.t+p.s(4),inner,row.cy()+p.s(2)},p.s(13),ui::rgb(th::kText),Weight::Medium);
+            p.text(descriptions[i],{x+p.s(32),row.cy(),inner,row.b-p.s(3)},p.s(12),ui::rgb(th::kText2));
         }
     }
 
@@ -845,14 +847,21 @@ void ClientApp::draw_lobby(ui::Painter& p, const Rect& r)
 
 // ---- stream overlay -----------------------------------------------------------
 
+bool ClientApp::stream_toolbar_visible() const
+{
+    // Offline previews keep it up so the controls can be reviewed.
+    return !hooks_.preview.empty() || now_us() - last_mouse_move_us_ < 2'500'000;
+}
+
 void ClientApp::draw_stream_overlay(ui::Painter& p, const Rect& r)
 {
     if (!hooks_.preview.empty()) {
         p.background(r);
-        // Sits below the stats panel so both stay readable.
-        const float cy = std::max(r.cy(), p.s(420));
-        p.text("Stream preview", {0, cy - p.s(38), r.r, cy}, p.s(30), ui::rgb(th::kText), Weight::SemiBold, Align::Center);
-        p.text("No live video - connect a host to see your game", {0, cy + p.s(8), r.r, cy + p.s(38)}, p.s(15), ui::rgb(th::kText2), Weight::Regular, Align::Center);
+        // Centred in the space right of the stats panel when it is open.
+        const float l = show_stats_ ? p.s(32) + std::min(r.w() - p.s(32), p.s(660)) : r.l;
+        const float cy = r.cy() - p.s(24);
+        p.text("Stream preview", {l, cy - p.s(38), r.r, cy}, p.s(30), ui::rgb(th::kText), Weight::SemiBold, Align::Center);
+        p.text("No live video - connect a host to see your game", {l, cy + p.s(8), r.r, cy + p.s(38)}, p.s(15), ui::rgb(th::kText2), Weight::Regular, Align::Center);
     }
     std::string toast;
     double until;
@@ -869,72 +878,156 @@ void ClientApp::draw_stream_overlay(ui::Painter& p, const Rect& r)
         p.text("Reconnecting...", Rect{r.l, r.cy() + p.s(16), r.r, r.cy() + p.s(46)}, p.s(18), ui::rgb(th::kText),
                Weight::SemiBold, Align::Center);
     }
+    draw_stream_toolbar(p, r);
     if (now_s() < until && !toast.empty()) {
         const float alpha = static_cast<float>(std::min(1.0, (until - now_s()) * 2));
-        const float w = p.text_width(toast, p.s(14), Weight::Medium) + p.s(40);
-        const Rect t{r.cx() - w / 2, r.b - p.s(80), r.cx() + w / 2, r.b - p.s(40)};
-        p.fill(t, ui::rgb(0x16171A, 0.92f * alpha), p.s(20));
-        p.stroke(t, ui::rgb(0xFFFFFF, 0.08f * alpha), p.s(1), p.s(20));
-        p.text(toast, t, p.s(14), ui::rgb(th::kText, alpha), Weight::Medium, Align::Center);
+        const float w = p.text_width(toast, p.s(13), Weight::Medium) + p.s(36);
+        const Rect t{r.cx() - w / 2, p.s(16), r.cx() + w / 2, p.s(50)};
+        p.fill(t, ui::rgb(0x16171A, 0.92f * alpha), t.h() / 2);
+        p.stroke(t, ui::rgb(0xFFFFFF, 0.08f * alpha), p.s(1), t.h() / 2);
+        p.text(toast, t, p.s(13), ui::rgb(th::kText, alpha), Weight::Medium, Align::Center);
     }
 }
+
+void ClientApp::draw_stream_toolbar(ui::Painter& p, const Rect& r)
+{
+    std::lock_guard<std::mutex> lk(mu_);
+    ui_.begin_frame();
+    if (stream_toolbar_visible()) {
+        struct Item { int action; const char* label; ButtonStyle style; };
+        const Item items[] = {
+            {kActStats, "Stats", show_stats_ ? ButtonStyle::Secondary : ButtonStyle::Ghost},
+            {kActController, "Controller", ButtonStyle::Ghost},
+            {kActFullscreen, fullscreen_ ? "Exit full screen" : "Full screen", ButtonStyle::Ghost},
+            {kActScreenshot, "Screenshot", ButtonStyle::Ghost},
+            {kActStop, "End stream", ButtonStyle::Danger},
+        };
+        const float pad = p.s(6), gap = p.s(4), h = p.s(34), divider = p.s(13);
+        float widths[5], total = pad * 2 + divider;
+        for (int i = 0; i < 5; ++i) {
+            widths[i] = p.text_width(items[i].label, p.s(14), Weight::SemiBold) + p.s(28);
+            total += widths[i] + (i ? gap : 0);
+        }
+        const Rect bar{r.cx() - total / 2, r.b - p.s(24) - h - pad * 2, r.cx() + total / 2, r.b - p.s(24)};
+        p.shadow(bar, bar.h() / 2, 0.45f);
+        p.fill(bar, ui::rgb(0x16171A, 0.94f), bar.h() / 2);
+        p.stroke(bar, ui::rgb(0xFFFFFF, 0.08f), p.s(1), bar.h() / 2);
+        float x = bar.l + pad;
+        for (int i = 0; i < 5; ++i) {
+            if (i == 4) {  // End stream sits apart from the view controls
+                p.line(x + divider / 2 - gap / 2, bar.t + p.s(12), x + divider / 2 - gap / 2, bar.b - p.s(12), ui::rgb(0xFFFFFF, 0.1f), p.s(1));
+                x += divider;
+            }
+            const Rect b{x, bar.t + pad, x + widths[i], bar.b - pad};
+            if (p.button(ui_, items[i].action, b, items[i].label, items[i].style)) post_action(items[i].action);
+            if (items[i].action == kActStats && show_stats_) p.circle(b.r - p.s(9), b.t + p.s(9), p.s(2.5f), ui::rgb(th::kAccent));
+            x = b.r + gap;
+        }
+    }
+    ui_.take_click();
+}
+
+namespace {
+
+// Everything the stats panel shows, filled from live counters or offline sample values.
+struct StatsView {
+    std::string resolution, codec, encoder, present_mode, device, bridge;
+    double mbps = 0, rtt = 0, jitter = 0, loss = 0, queue = 0;
+    bool e2e_valid = false;
+    double e2e_p50 = 0, e2e_p95 = 0, cap_send_p50 = 0, cap_send_p95 = 0, enc_p50 = 0, enc_p95 = 0, dec_p50 = 0, dec_p95 = 0;
+    double input_p50 = 0, input_p95 = 0, host_bridge = 0, bridge_switch_p50 = 0, bridge_switch_p99 = 0;
+    double send_hz = 0, capture_fps = 0, encode_fps = 0, decode_fps = 0, present_fps = 0;
+    unsigned reports = 0, capture_drops = 0, sender_drops = 0, audio_ms = 0;
+    unsigned long long network_drops = 0, fec_fixed = 0, decoder_drops = 0, underruns = 0;
+};
+
+}  // namespace
 
 void ClientApp::draw_stats(ui::Painter& p, const Rect& r)
 {
     const uint64_t now = now_us();
-    proto::HostStats hs;
-    proto::StreamConfig sc;
-    {
-        std::lock_guard<std::mutex> lk(mu_);
-        hs = host_stats_;
-        sc = stream_;
+    const bool sample = !hooks_.preview.empty();
+    StatsView v;
+    if (sample) {
+        v = {"1920 x 1080 at 60", "H.264", "Hardware H.264 encoder", "Balanced", "Xbox Wireless Controller", "Connected"};
+        v.mbps = 18.4; v.rtt = 9.8; v.jitter = 0.6; v.loss = 0.02; v.queue = 1.2;
+        v.e2e_valid = true; v.e2e_p50 = 34.2; v.e2e_p95 = 41.8;
+        v.cap_send_p50 = 6.1; v.cap_send_p95 = 7.9; v.enc_p50 = 3.2; v.enc_p95 = 4.0; v.dec_p50 = 1.9; v.dec_p95 = 2.6;
+        v.input_p50 = 4.9; v.input_p95 = 7.2; v.host_bridge = 0.21; v.bridge_switch_p50 = 1.02; v.bridge_switch_p99 = 1.98;
+        v.send_hz = 250; v.reports = 250; v.capture_fps = 60.0; v.encode_fps = 60.0; v.decode_fps = 59.9; v.present_fps = 60.0;
+        v.network_drops = 2; v.fec_fixed = 2; v.audio_ms = 40;
+    } else {
+        proto::HostStats hs;
+        proto::StreamConfig sc;
+        {
+            std::lock_guard<std::mutex> lk(mu_);
+            hs = host_stats_;
+            sc = stream_;
+        }
+        const ClientNetStats ns = net_.stats();
+        const LatencySummary e2e = e2e_.summary(now);
+        const LatencySummary dec = decode_hist_.summary(now);
+        const auto ms = [](uint32_t us) { return us / 1000.0; };
+        v.resolution = fmt("%u x %u at %u", hs.width, hs.height, hs.fps);
+        v.codec = sc.codec == proto::VideoCodec::HEVC ? "HEVC" : "H.264";
+        v.encoder = hs.encoder_name[0] ? hs.encoder_name : "-";
+        v.present_mode = to_string(renderer_.mode());
+        v.device = input_.active_device().empty() ? "None" : input_.active_device();
+        v.bridge = hs.esp_connected ? (hs.esp_failsafe ? "Failsafe" : "Connected") : "Offline";
+        v.mbps = ns.mbps; v.rtt = ns.rtt_ms; v.jitter = ns.jitter_ms; v.loss = ns.loss_pct; v.queue = ns.queue_delay_ms;
+        v.e2e_valid = e2e.count > 0; v.e2e_p50 = ms(e2e.p50); v.e2e_p95 = ms(e2e.p95);
+        v.cap_send_p50 = ms(hs.capture_to_send_p50); v.cap_send_p95 = ms(hs.capture_to_send_p95);
+        v.enc_p50 = ms(hs.encode_p50); v.enc_p95 = ms(hs.encode_p95); v.dec_p50 = ms(dec.p50); v.dec_p95 = ms(dec.p95);
+        v.input_p50 = hs.input_owd_p50 / 1000.0; v.input_p95 = hs.input_owd_p95 / 1000.0; v.host_bridge = hs.input_host_p50 / 1000.0;
+        v.bridge_switch_p50 = hs.esp_rx_to_console_p50 / 1000.0; v.bridge_switch_p99 = hs.esp_rx_to_console_p99 / 1000.0;
+        v.send_hz = input_.send_rate(); v.reports = hs.esp_reports_per_s;
+        v.capture_fps = hs.capture_fps_x100 / 100.0; v.encode_fps = hs.encode_fps_x100 / 100.0;
+        v.decode_fps = decode_fps_; v.present_fps = present_fps_;
+        v.capture_drops = hs.capture_drops; v.sender_drops = hs.encode_drops;
+        v.network_drops = ns.frames_dropped; v.fec_fixed = ns.frames_fec_recovered; v.decoder_drops = decoder_drops_;
+        v.audio_ms = audio_.buffered_ms(); v.underruns = audio_.underruns();
     }
-    const ClientNetStats ns = net_.stats();
-    const LatencySummary e2e = e2e_.summary(now);
-    const LatencySummary dec = decode_hist_.summary(now);
-    auto ms = [](uint32_t us) { return us / 1000.0; };
 
-    std::vector<std::pair<std::string, std::string>> rows = {
-        {"Stream", fmt("%ux%u @ %u  |  %.1f Mbps  |  %s", hs.width, hs.height, hs.fps, ns.mbps,
-                       sc.codec == proto::VideoCodec::HEVC ? "HEVC" : "H.264")},
-        {"Encoder", hs.encoder_name[0] ? hs.encoder_name : "-"},
-        {"Network", fmt("RTT %.1f ms  |  jitter %.1f ms  |  loss %.2f%%  |  queue %.1f ms", ns.rtt_ms, ns.jitter_ms,
-                        ns.loss_pct, ns.queue_delay_ms)},
-        {"Glass-to-glass*", e2e.count ? fmt("%.1f / %.1f / %.1f ms  (p50/p95/p99)", ms(e2e.p50), ms(e2e.p95), ms(e2e.p99))
-                                      : "syncing clocks..."},
-        {"Host", fmt("capture->sent %.1f/%.1f ms  |  encode %.1f/%.1f ms", ms(hs.capture_to_send_p50),
-                     ms(hs.capture_to_send_p95), ms(hs.encode_p50), ms(hs.encode_p95))},
-        {"Decode", fmt("%.1f / %.1f ms  |  present %s", ms(dec.p50), ms(dec.p95), to_string(renderer_.mode()))},
-        {"Input", fmt("PC->host %.1f/%.1f ms  |  host->bridge %.2f ms  |  bridge->Switch %.2f/%.2f ms",
-                      hs.input_owd_p50 / 1000.0, hs.input_owd_p95 / 1000.0, hs.input_host_p50 / 1000.0,
-                      hs.esp_rx_to_console_p50 / 1000.0, hs.esp_rx_to_console_p99 / 1000.0)},
-        {"Controller", fmt("%s  |  %.0f Hz sent  |  bridge %s, %u reports/s",
-                           input_.active_device().empty() ? "none" : input_.active_device().c_str(), input_.send_rate(),
-                           hs.esp_connected ? (hs.esp_failsafe ? "failsafe" : "ok") : "offline", hs.esp_reports_per_s)},
-        {"FPS", fmt("capture %.1f  |  encode %.1f  |  decode %.1f  |  present %.1f", hs.capture_fps_x100 / 100.0,
-                    hs.encode_fps_x100 / 100.0, decode_fps_, present_fps_)},
-        {"Drops", fmt("capture %u  |  sender %u  |  network %llu (FEC fixed %llu)  |  decoder %llu", hs.capture_drops,
-                      hs.encode_drops, static_cast<unsigned long long>(ns.frames_dropped),
-                      static_cast<unsigned long long>(ns.frames_fec_recovered),
-                      static_cast<unsigned long long>(decoder_drops_))},
-        {"Audio", fmt("buffer %u ms  |  underruns %llu", audio_.buffered_ms(),
-                      static_cast<unsigned long long>(audio_.underruns()))},
+    const float w = std::min(r.w() - p.s(32), p.s(660));
+    const Rect panel{p.s(16), p.s(16), p.s(16) + w, std::min(r.b - p.s(16), p.s(16) + p.s(560))};
+    p.shadow(panel, p.s(12), 0.4f);
+    p.fill(panel, ui::rgb(0x0E0F11, 0.9f), p.s(12));
+    p.stroke(panel, ui::rgb(0xFFFFFF, 0.08f), p.s(1), p.s(12));
+    const float in = panel.l + p.s(18), out = panel.r - p.s(18);
+
+    // Header.
+    p.text("Stream stats", {in, panel.t + p.s(12), out, panel.t + p.s(40)}, p.s(14), ui::rgb(th::kText), Weight::SemiBold);
+    if (sample) {
+        p.pill(out, panel.t + p.s(14), "Sample data", th::kAccent, true);
+    } else {
+        const float hide = p.text_width("Hide", p.s(12));
+        p.text("Hide", {out - hide, panel.t + p.s(12), out, panel.t + p.s(40)}, p.s(12), ui::rgb(th::kText3));
+        p.keycap(out - hide - p.s(30), panel.t + p.s(26), "F1");
+    }
+
+    // Headline figures.
+    struct Figure { std::string value; const char* unit; const char* label; };
+    const Figure figures[] = {
+        {v.e2e_valid ? fmt("%.1f", v.e2e_p50) : "-", "ms", "Glass to glass*"},
+        {fmt("%.1f", v.present_fps), "fps", "Frame rate"},
+        {fmt("%.1f", v.mbps), "Mbps", "Bitrate"},
+        {fmt("%.2f", v.loss), "%", "Packet loss"},
     };
-
-    const float lh = p.s(21), lw = p.s(118);
-    const float w = std::min(r.w() - p.s(32), p.s(700));
-    const Rect panel{p.s(16), p.s(16), p.s(16) + w, p.s(16) + lh * rows.size() + p.s(78)};
-    p.fill(panel, ui::rgb(0x0E0F11, 0.84f), p.s(12));
-    p.stroke(panel, ui::rgb(0xFFFFFF, 0.07f), p.s(1), p.s(12));
-    float y = panel.t + p.s(10);
-    for (auto& [k, v] : rows) {
-        p.text(k, Rect{panel.l + p.s(14), y, panel.l + lw, y + lh}, p.s(12.5f), ui::rgb(th::kText2), Weight::Medium);
-        p.text(v, Rect{panel.l + lw, y, panel.r - p.s(12), y + lh}, p.s(12.5f), ui::rgb(th::kText), Weight::Regular);
-        y += lh;
+    const float fy = panel.t + p.s(50), fw = (out - in) / 4;
+    for (int i = 0; i < 4; ++i) {
+        const float fx = in + fw * i;
+        if (i) p.line(fx - p.s(12), fy + p.s(4), fx - p.s(12), fy + p.s(44), ui::rgb(0xFFFFFF, 0.07f), p.s(1));
+        const float vw = p.text_width(figures[i].value, p.s(22), Weight::SemiBold);
+        p.text(figures[i].value, {fx, fy, fx + fw, fy + p.s(28)}, p.s(22), ui::rgb(th::kText), Weight::SemiBold);
+        p.text(figures[i].unit, {fx + vw + p.s(4), fy + p.s(8), fx + fw, fy + p.s(28)}, p.s(12), ui::rgb(th::kText3));
+        p.text(figures[i].label, {fx, fy + p.s(30), fx + fw - p.s(14), fy + p.s(48)}, p.s(11.5f), ui::rgb(th::kText2));
     }
-    // Sparkline of glass-to-glass latency (last 120 frames, 0-100 ms).
-    const Rect sp{panel.l + p.s(14), y + p.s(8), panel.r - p.s(14), panel.b - p.s(22)};
-    p.fill(sp, ui::rgb(0xFFFFFF, 0.04f), p.s(4));
+
+    // Glass-to-glass trace, 0-100 ms.
+    const Rect sp{in, fy + p.s(62), out, fy + p.s(118)};
+    p.fill(sp, ui::rgb(0xFFFFFF, 0.03f), p.s(6));
+    for (int g = 1; g < 4; ++g)
+        p.line(sp.l + p.s(6), sp.b - sp.h() * g / 4, sp.r - p.s(6), sp.b - sp.h() * g / 4, ui::rgb(0xFFFFFF, 0.04f), p.s(1));
     for (int i = 1; i < 120; ++i) {
         const float a = e2e_spark_[(spark_pos_ + i - 1) % 120], b = e2e_spark_[(spark_pos_ + i) % 120];
         if (a <= 0 || b <= 0) continue;
@@ -942,8 +1035,47 @@ void ClientApp::draw_stats(ui::Painter& p, const Rect& r)
         p.line(x0, sp.b - sp.h() * std::min(a, 100.0f) / 100.0f, x1, sp.b - sp.h() * std::min(b, 100.0f) / 100.0f,
                ui::rgb(th::kAccent), p.s(1.5f));
     }
-    p.text("* capture card -> this screen, excluding display scan-out.  F1 hides this panel.",
-           Rect{panel.l + p.s(14), panel.b - p.s(20), panel.r, panel.b - p.s(4)}, p.s(10.5f), ui::rgb(th::kText3));
+    p.text("100 ms", {sp.r - p.s(60), sp.t + p.s(2), sp.r - p.s(8), sp.t + p.s(16)}, p.s(10.5f), ui::rgb(th::kText3), Weight::Regular, Align::Trailing);
+
+    // Detail sections in two columns.
+    using Rows = std::vector<std::pair<std::string, std::string>>;
+    const std::string arrow = " \xE2\x86\x92 ";
+    const auto pair_ms = [](double a, double b) { return fmt("%.1f / %.1f ms", a, b); };
+    const std::pair<const char*, Rows> left[] = {
+        {"Video", {{"Resolution", v.resolution}, {"Codec", v.codec}, {"Encoder", v.encoder}, {"Display mode", v.present_mode}}},
+        {"Network", {{"Round trip", fmt("%.1f ms", v.rtt)}, {"Jitter", fmt("%.1f ms", v.jitter)}, {"Queue delay", fmt("%.1f ms", v.queue)}}},
+        {"Latency  p50 / p95", {{"Glass to glass*", v.e2e_valid ? pair_ms(v.e2e_p50, v.e2e_p95) : "Syncing clocks"},
+                                {"Capture" + arrow + "send", pair_ms(v.cap_send_p50, v.cap_send_p95)},
+                                {"Encode", pair_ms(v.enc_p50, v.enc_p95)}, {"Decode", pair_ms(v.dec_p50, v.dec_p95)}}},
+    };
+    const std::pair<const char*, Rows> right[] = {
+        {"Input", {{"PC" + arrow + "host", pair_ms(v.input_p50, v.input_p95)}, {"Host" + arrow + "bridge", fmt("%.2f ms", v.host_bridge)},
+                   {"Bridge" + arrow + "Switch", fmt("%.2f / %.2f ms", v.bridge_switch_p50, v.bridge_switch_p99)}}},
+        {"Controller", {{"Device", v.device}, {"Sending", fmt("%.0f Hz", v.send_hz)}, {"Bridge", fmt("%s, %u reports/s", v.bridge.c_str(), v.reports)}}},
+        {"Frames", {{"Capture / encode", fmt("%.1f / %.1f fps", v.capture_fps, v.encode_fps)}, {"Decode / present", fmt("%.1f / %.1f fps", v.decode_fps, v.present_fps)},
+                    {"Dropped", fmt("%u capture, %u sender", v.capture_drops, v.sender_drops)},
+                    {"Network", fmt("%llu lost, %llu fixed by FEC", v.network_drops, v.fec_fixed)}}},
+        {"Audio", {{"Buffer", fmt("%u ms, %llu underruns", v.audio_ms, v.underruns)}}},
+    };
+    const float col_gap = p.s(28), cw = (out - in - col_gap) / 2, top = sp.b + p.s(16), limit = panel.b - p.s(30);
+    const auto column = [&](float cx, const auto& sections) {
+        float y = top;
+        for (const auto& [title, rows] : sections) {
+            if (y + p.s(22) > limit) return;
+            p.text(title, {cx, y, cx + cw, y + p.s(20)}, p.s(11.5f), ui::rgb(th::kText2), Weight::SemiBold);
+            y += p.s(22);
+            for (const auto& [k, val] : rows) {
+                if (y + p.s(19) > limit) return;
+                p.text(k, {cx, y, cx + cw * 0.42f, y + p.s(19)}, p.s(12), ui::rgb(th::kText3));
+                p.text(val, {cx + cw * 0.42f, y, cx + cw, y + p.s(19)}, p.s(12), ui::rgb(th::kText), Weight::Regular, Align::Trailing);
+                y += p.s(19);
+            }
+            y += p.s(10);
+        }
+    };
+    column(in, left);
+    column(in + cw + col_gap, right);
+    p.text("* Capture card to this screen, excluding display scan-out.", {in, panel.b - p.s(26), out, panel.b - p.s(8)}, p.s(10.5f), ui::rgb(th::kText3));
 }
 
 }  // namespace hikari

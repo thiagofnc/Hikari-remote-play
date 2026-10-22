@@ -56,6 +56,8 @@ private:
         kActFullscreen,
         kActConnection,
         kActChangeRole,
+        kActStats,
+        kActScreenshot,
     };
 
     void load_settings();
@@ -65,6 +67,8 @@ private:
     void draw_lobby(ui::Painter& p, const ui::Rect& r);
     void draw_stream_overlay(ui::Painter& p, const ui::Rect& r);
     void draw_stats(ui::Painter& p, const ui::Rect& r);
+    void draw_stream_toolbar(ui::Painter& p, const ui::Rect& r);
+    bool stream_toolbar_visible() const;
     void post_action(int action);
     void do_action(int action);  // UI thread
     void set_screen(Screen s);

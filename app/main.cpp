@@ -234,10 +234,7 @@ private:
             {"HDMI audio",s.audio_ok,s.audio_ok?s.audio_name:"Searching for capture audio..."},
             {"Hardware encoder",s.encoder_ok,s.encoder_benchmarking?"Benchmarking...":s.encoder_name},
         };
-        int ready=0;
-        for(const auto& check:checks) ready+=check.ok;
-        p.text("Connected devices",{in,devices.t+p.s(18),edge-p.s(120),devices.t+p.s(44)},p.s(15),ui::rgb(th::kText),ui::Weight::SemiBold);
-        p.pill(edge,devices.t+p.s(19),ready==4?"All ready":std::to_string(ready)+" of 4 ready",ready==4?th::kGood:th::kWarn,true);
+        p.text("Connected devices",{in,devices.t+p.s(18),edge,devices.t+p.s(44)},p.s(15),ui::rgb(th::kText),ui::Weight::SemiBold);
         const float pitch=p.s(78);
         float y=devices.t+p.s(62);
         for(int i=0;i<4;++i) {
@@ -268,7 +265,8 @@ private:
             ay+=p.s(36);
         }
         p.divider(sx,sr,pair.b-p.s(104));
-        p.pill(sx,pair.b-p.s(88),s.client_connected?"Connected: "+s.client_name:"Waiting for a client",s.client_connected?th::kGood:th::kText3);
+        p.circle(sx+p.s(4),pair.b-p.s(74),p.s(3),ui::rgb(s.client_connected?th::kGood:th::kText3));
+        p.text(s.client_connected?"Connected: "+s.client_name:"Waiting for a client",{sx+p.s(16),pair.b-p.s(88),sr,pair.b-p.s(60)},p.s(13),ui::rgb(th::kText));
         p.button(ui_,4,{sx,pair.b-p.s(52),sx+p.s(156),pair.b-p.s(16)},"Set up Tailscale");
 
         p.text(s.message,{x,p.s(560),right,p.s(600)},p.s(12),ui::rgb(th::kText2),ui::Weight::Regular,ui::Align::Leading,ui::Align::Center,true);
@@ -375,7 +373,7 @@ int run_preview(const std::string& screen)
         show_controller_settings(nullptr, cfg, mapping, deps);
         return 0;
     }
-    if (screen != "switch2" && screen != "connection-needed" && screen != "ready" && screen != "ready-compact" && screen != "asleep" && screen != "waking" && screen != "failed" && screen != "stream")
+    if (screen != "switch2" && screen != "connection-needed" && screen != "ready" && screen != "ready-compact" && screen != "asleep" && screen != "waking" && screen != "failed" && screen != "stream" && screen != "stream-clean")
         return 2;
     ClientApp client;
     ClientHooks hooks;

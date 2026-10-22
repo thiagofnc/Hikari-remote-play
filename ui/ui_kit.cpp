@@ -322,39 +322,37 @@ bool Painter::button(Interaction& ui, int id, const Rect& r, const std::string& 
     const bool hover = enabled && ui.hovered(id, r);
     const bool down = hover && ui.mouse_down && ui.pressed_id == id;
     const bool focus = enabled && ui.focus_id == id;
-    const float rad = s(8);
-    const float dim = enabled ? 1.0f : 0.4f;
-    D2D1_COLOR_F fg;
+    const float rad = s(6);
+    // Flat button colours, kept from the original graphite palette.
+    D2D1_COLOR_F bg, fg, border{0, 0, 0, 0};
     switch (style) {
     case ButtonStyle::Primary:
-        // Lit amber: brighter top, a crisp inner highlight and a soft drop.
-        if (enabled && !down) shadow(r, rad, 0.30f);
-        if (down) fill(r, rgb(theme::kAccentDown, dim), rad);
-        else fill_gradient(r, rgb(hover ? 0xFFD452 : 0xFFC52A, dim), rgb(hover ? 0xFFC21A : theme::kAccent, dim), rad);
-        stroke(r, rgb(0x000000, 0.22f * dim), s(1), rad);
-        if (!down) line(r.l + rad, r.t + s(1.5f), r.r - rad, r.t + s(1.5f), rgb(0xFFFFFF, 0.38f * dim), s(1));
-        fg = rgb(theme::kOnAccent, enabled ? 1.0f : 0.55f);
+        bg = rgb(hover ? theme::kAccentHover : theme::kAccent);
+        fg = rgb(theme::kOnAccent);
         break;
     case ButtonStyle::Danger:
-        fill(r, rgb(theme::kBad, (down ? 0.30f : hover ? 0.22f : 0.14f) * dim), rad);
-        stroke(r, rgb(theme::kBad, 0.35f * dim), s(1), rad);
-        fg = rgb(0xFFB4B4, dim);
+        bg = rgb(theme::kBad, hover ? 0.28f : 0.18f);
+        fg = rgb(0xFFB4B4);
         break;
     case ButtonStyle::Ghost:
-        if (hover) fill(r, rgb(0xFFFFFF, down ? 0.08f : 0.05f), rad);
-        fg = rgb(hover ? theme::kText : theme::kText2, dim);
+        bg = rgb(0xFFFFFF, hover ? 0.06f : 0.0f);
+        fg = rgb(hover ? theme::kText : theme::kText2);
         break;
     default:
-        if (down) fill(r, rgb(0x1B1C20, dim), rad);
-        else fill_gradient(r, rgb(hover ? 0x2D2F35 : 0x25272C, dim), rgb(hover ? 0x26282D : 0x1F2024, dim), rad);
-        stroke(r, rgb(hover ? 0x474A52 : theme::kBorderStrong, dim), s(1), rad);
-        if (!down) line(r.l + rad, r.t + s(1.5f), r.r - rad, r.t + s(1.5f), rgb(0xFFFFFF, 0.05f * dim), s(1));
-        fg = rgb(theme::kText, dim);
+        bg = rgb(hover ? 0x303339 : 0x282A2F);
+        fg = rgb(theme::kText);
+        border = rgb(0x41444B);
         break;
     }
-    if (focus) stroke(r.inset(-s(3)), rgb(theme::kAccent, 0.55f), s(1.5f), rad + s(3));
-    if (!label.empty())
-        text(label, down ? Rect{r.l, r.t + s(1), r.r, r.b + s(1)} : r, s(13.5f), fg, Weight::SemiBold, Align::Center, Align::Center);
+    if (!enabled) {
+        bg.a *= 0.4f;
+        fg.a *= 0.4f;
+    }
+    Rect rr = down ? r.inset(s(1)) : r;
+    fill(rr, bg, rad);
+    if (border.a > 0) stroke(rr, border, s(1), rad);
+    if (focus) stroke(rr.inset(-s(3)), rgb(theme::kAccent, 0.9f), s(2), rad + s(3));
+    if (!label.empty()) text(label, rr, s(14), fg, Weight::SemiBold, Align::Center, Align::Center);
     return enabled && ui.clicked_id == id;
 }
 

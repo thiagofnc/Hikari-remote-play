@@ -4,7 +4,7 @@
 #>
 [CmdletBinding()]
 param(
-    [ValidateSet('setup', 'connection', 'host', 'controller', 'controller-compact', 'controller-switch2', 'controller-switch2-compact', 'ready', 'ready-compact', 'connection-needed', 'switch2', 'asleep', 'waking', 'failed', 'stream')]
+    [ValidateSet('setup', 'connection', 'host', 'controller', 'controller-compact', 'controller-switch2', 'controller-switch2-compact', 'ready', 'ready-compact', 'connection-needed', 'switch2', 'asleep', 'waking', 'failed', 'stream', 'stream-clean')]
     [string]$Screen = 'ready',
     [string]$BuildDir = "$env:LOCALAPPDATA\Hikari-build\clang-Release"
 )

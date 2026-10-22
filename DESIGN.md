@@ -101,7 +101,7 @@ components:
 
 **Creative North Star: "A precise remote-play utility"**
 
-**Premium SaaS pass (2026-10-22, branch `ui/premium-saas`).** The user asked for a modern, very premium SaaS feel and chose the Linear-style refined direction: keep graphite and amber, deepen the canvas to near-black, raise working panes as hairline-bordered cards with a soft offset shadow, light primary actions with a vertical amber gradient and inner top highlight, and use tinted status chips, drawn status icons and keycaps. This supersedes the earlier "no cards" rule for working panes only; decorative glows, glass and breathing actions remain banned. Supplied assets are untouched. Before/after evidence for all fifteen offline previews: `artifacts/ui-review/premium-saas/{before,after}/*.png` and `artifacts/ui-review/premium-saas/index.html`.
+**Premium SaaS pass (2026-10-22, branch `ui/premium-saas`).** The user asked for a modern, very premium SaaS feel and chose the Linear-style refined direction: keep graphite and amber, deepen the canvas to near-black, raise working panes as hairline-bordered cards with a soft offset shadow, light primary actions with a vertical amber gradient and inner top highlight, and use tinted status chips, drawn status icons and keycaps. This supersedes the earlier "no cards" rule for working panes only; decorative glows, glass and breathing actions remain banned. Supplied assets are untouched. Before/after evidence for every offline preview: `artifacts/ui-review/premium-saas/{before,after}/*.png` and `artifacts/ui-review/premium-saas/index.html`.
 
 Hikari is a native C++ Windows application rendered with Win32, Direct2D and DirectWrite. Its matte graphite surfaces, restrained Hikari amber and compact Windows controls put connection state and useful actions first. The user selected the controller settings screen as the reference and requested a refined SaaS product feel for the other menus. The built result carries that same measured title/subtitle hierarchy, compact split workspaces and consistent actions across setup, connection, host and lobby while retaining the native Windows stack.
 
@@ -172,7 +172,7 @@ Controller settings default to 1200 by 760 DIP, with a minimum of 1040 by 700 DI
 
 ## Elevation & Depth
 
-Three tonal levels carry depth: the `#0E0F11` canvas, `#16171A` raised cards and footer bars, and `#1E1F23` controls and fields. Working panes are cards (`Painter::card`, mirrored by `SettingsWindow::card`): 12 DIP corners, a 6.5% white hairline, a 3.5% white top highlight and a soft downward shadow built from six stacked translucent layers (each expanded by 1.6 DIP and offset 2.7–6.2 DIP; strength 0.32). Window footers are flat `#16171A` bands with a hairline top rule; the lobby uses a 36 DIP status bar. The lobby console illustration sits on a recessed stage (canvas at 70%, 9 DIP corners). Popups and dialogs use the same shadow at higher strength; dialogs dim the canvas with 55% black.
+Three tonal levels carry depth: the `#0E0F11` canvas, `#16171A` raised cards and footer bars, and `#1E1F23` controls and fields. Working panes are cards (`Painter::card`, mirrored by `SettingsWindow::card`): 12 DIP corners, a 6.5% white hairline, a 3.5% white top highlight and a soft downward shadow built from six stacked translucent layers (each expanded by 1.6 DIP and offset 2.7–6.2 DIP; strength 0.32). Window footers are flat `#16171A` bands with a hairline top rule; the lobby uses a 36 DIP status bar. The lobby session and stream preference cards keep their original contents and controls; only the surface changed. The console illustration is inset 24 DIP from the card edge. Popups and dialogs use the same shadow at higher strength; dialogs dim the canvas with 55% black.
 
 Windows 11 frames match the canvas: `ui::style_window` sets dark mode, rounded corners, a `#0E0F11` caption and a `#2B2D33` border through DWM.
 
@@ -188,7 +188,11 @@ Shared buttons and connection fields use 8 DIP corners; cards 12 DIP; status chi
 
 The shared hit list includes only enabled actions. Lobby focus persists across repaint, advances with Tab/Shift+Tab and activates with Enter or Space. When session state replaces Play with Retry, connection setup or Cancel, focus is reconciled to an available action. Native Alt+Enter fullscreen behavior remains available.
 
-Primary buttons are lit amber: a `#FFC52A` to `#FBBB04` vertical gradient (hover `#FFD452` to `#FFC21A`), a 38% white inner top highlight, a 22% black hairline and a soft shadow; pressed flattens to `#E2A600` and drops the label 1 DIP. Secondary buttons use a `#25272C` to `#1F2024` gradient, a `#3A3D44` outline and a 5% white top highlight. Ghost actions gain a 5% white hover fill. Focus is a 1.5 DIP amber stroke at 55% opacity, 3 DIP outside the bounds. Disabled opacity multiplies by 0.4. Labels are centered, 13.5 DIP semibold. Controller settings implement the same recipe locally. Danger actions use red text on a restrained red tint with a red hairline.
+Buttons keep the original flat graphite treatment at the user's request: primary amber `#FBBB04` (hover `#FFCB33`) with dark text; secondary `#282A2F` (hover `#303339`) with a `#41444B` outline; ghost gains a 6% white hover fill; danger is a red tint. Shared buttons use 6 DIP corners and 14 DIP semibold labels, inset 1 DIP while pressed and show a 2 DIP amber focus stroke 3 DIP outside. No gradients, highlights or button shadows. Controller settings keep their local 8 DIP variant with the same flat colours.
+
+### In-game overlay
+
+While streaming, moving the mouse reveals a bottom-centred toolbar for 2.5 seconds: Stats (toggle, amber dot when on), Controller, Full screen, Screenshot and, set apart, End stream. It is drawn only while visible, so idle play keeps the bare video path. The stats panel (F1 or the toolbar) shows four headline figures, a 0 to 100 ms glass-to-glass trace and two columns of labelled detail; offline previews fill it with sample values marked "Sample data". Toasts sit at the top centre.
 
 ### Inputs / Fields
 
