@@ -312,9 +312,9 @@ void write(ByteWriter& w, const HostStats& v)
     w.u16(v.encode_p50);
     w.u16(v.encode_p95);
     w.u16(v.encode_p99);
-    w.i32(v.input_owd_raw_p50);
-    w.i32(v.input_owd_raw_p95);
-    w.i32(v.input_owd_raw_p99);
+    w.i32(v.input_owd_p50);
+    w.i32(v.input_owd_p95);
+    w.i32(v.input_owd_p99);
     w.u16(v.input_host_p50);
     w.u16(v.input_host_p99);
     w.u8(v.esp_connected);
@@ -345,9 +345,9 @@ bool read(ByteReader& r, HostStats& v)
     v.encode_p50 = r.u16();
     v.encode_p95 = r.u16();
     v.encode_p99 = r.u16();
-    v.input_owd_raw_p50 = r.i32();
-    v.input_owd_raw_p95 = r.i32();
-    v.input_owd_raw_p99 = r.i32();
+    v.input_owd_p50 = r.i32();
+    v.input_owd_p95 = r.i32();
+    v.input_owd_p99 = r.i32();
     v.input_host_p50 = r.u16();
     v.input_host_p99 = r.u16();
     v.esp_connected = r.u8();

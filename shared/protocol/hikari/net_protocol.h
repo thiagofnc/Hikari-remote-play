@@ -175,11 +175,15 @@ enum InputFlags : uint8_t {
     kInputConnected = 1 << 0,  // a physical controller is attached on the client
     kInputLatencyMark = 1 << 1,
     kInputRedundant = 1 << 2,  // repeat of an already-sent state
+    kInputHostClock = 1 << 3,  // client_time_us already translated to the host clock
 };
 
 struct Input {
     uint32_t seq = 0;
-    uint64_t client_time_us = 0;  // controller sampled (client clock)
+    // Controller sample time. Once the client's clock sync has converged it
+    // is expressed on the *host* clock (kInputHostClock), so the host can
+    // measure true one-way input latency on its own.
+    uint64_t client_time_us = 0;
     uint8_t flags = 0;
     PadState pad;
 };
@@ -269,8 +273,8 @@ struct HostStats {
     uint16_t width = 0, height = 0, fps = 0;
     uint16_t capture_to_send_p50 = 0, capture_to_send_p95 = 0, capture_to_send_p99 = 0;
     uint16_t encode_p50 = 0, encode_p95 = 0, encode_p99 = 0;
-    // Raw (host_rx - client_sample) in us; client subtracts its clock offset.
-    int32_t input_owd_raw_p50 = 0, input_owd_raw_p95 = 0, input_owd_raw_p99 = 0;
+    // Controller sampled on the client -> received by the host (one way, us).
+    int32_t input_owd_p50 = 0, input_owd_p95 = 0, input_owd_p99 = 0;
     uint16_t input_host_p50 = 0, input_host_p99 = 0;  // host rx -> serial write
     uint8_t esp_connected = 0;
     uint8_t esp_usb_mounted = 0;

@@ -42,6 +42,7 @@ add_compile_definitions(
     HIKARI_VERSION="${PROJECT_VERSION}")
 
 add_subdirectory(shared)
+add_subdirectory(media)
 add_subdirectory(host)
 add_subdirectory(client)
 add_subdirectory(app)
