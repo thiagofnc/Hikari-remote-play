@@ -97,7 +97,7 @@ components:
 
 **Creative North Star: "A precise remote-play utility"**
 
-Hikari is a native C++ Windows application rendered with Win32, Direct2D and DirectWrite. Its matte graphite surfaces, restrained Hikari amber and compact Windows controls put connection state and useful actions first. The user selected the controller settings screen as the reference and requested a refined SaaS product feel for the other menus. The built result carries that same measured title/subtitle hierarchy, functional panes and compact actions across setup, connection, host and lobby while retaining the native Windows stack.
+Hikari is a native C++ Windows application rendered with Win32, Direct2D and DirectWrite. Its matte graphite surfaces, restrained Hikari amber and compact Windows controls put connection state and useful actions first. The user selected the controller settings screen as the reference and requested a refined SaaS product feel for the other menus. The built result carries that same measured title/subtitle hierarchy, compact split workspaces and consistent actions across setup, connection, host and lobby while retaining the native Windows stack.
 
 The supplied Hikari logo and original transparent Joy-Con image carry the product identity. The controller diagram is an interactive mapping surface: selecting a real control identifies its binding, while precise amber overlays show capture and live input. Preview screens explicitly identify sample data.
 
@@ -154,9 +154,9 @@ Non-wrapping text trims with a character ellipsis. Messages that need multiple l
 
 Dimensions are logical DIPs, scaled through the shared painter or a DPI-aware controller render target. Retain ordinary Windows frames and resize behavior. There is no web breakpoint or mobile layout.
 
-Setup, connection and host client sizes are 680 by 454, 760 by 568 and 900 by 724 DIP respectively. They share a 24 DIP outside margin, 22 DIP page title and 13 DIP supporting line. Functional panes use 12 DIP corners, 16 DIP gaps and approximately 22 DIP content insets. Setup presents Host and Client as equal side-by-side role choices. Connection places host details beside nearby hosts and anchors actions at the bottom. Host places connected-device checks beside pairing details. These compositions group actual tasks; they are not decorative dashboard cards.
+Setup, connection and host client sizes are 680 by 454, 760 by 568 and 900 by 688 DIP respectively. Their headers pair the supplied 24 DIP Hikari mark with a 22 DIP title and 13 DIP supporting line, followed by a thin divider at 100 DIP. Setup uses two full-width role rows with 17 DIP names, simple monitor icons and directional arrows. Connection and host use continuous split workspaces with a thin vertical divider instead of enclosing panels. Connection keeps Tailscale setup beside the form and anchors Cancel and Save and connect below a footer rule. Host device rows use a 78 DIP pitch and align readiness at the right. Footer actions remain separate from device and pairing information.
 
-The lobby applies the same 24 DIP margin and page hierarchy. Real Controller and Connection actions sit at the upper right with 36 DIP height. Session state and stream preference occupy the left column; host connection and readiness checks occupy the right. Content starts at 100 DIP with a 16 DIP pane gap. The session pane is 220 DIP tall; Play is 164 by 38 DIP. The left/right division uses 62% of the usable width for the left workspace. Stream preference is a vertical radio-choice list with row pitch up to 64 DIP; below 48 DIP pitch, labels collapse to one line and descriptions are omitted. The footer identifies offline sample data. This compact behavior is measured inside the native window, not a web breakpoint.
+The client lobby opens at 1120 by 700 physical window units scaled by DPI, with the existing 860 by 600 compact preview. It uses a 24 DIP margin, supplied logo, 22 DIP title and compact upper-right actions. Change role is a quiet text action; Controller and Connection retain their existing behavior. Only the console session has an inset graphite surface, with 8 DIP corners and a 220 DIP height. Stream preferences sit directly on the window canvas; a thin vertical divider separates the host column. Four readiness rows have a 48 DIP pitch and display their status in a right-aligned column. Play remains 164 by 38 DIP. The left workspace uses 62% of the available width. Preset rows show descriptions when their pitch is at least 48 DIP and collapse to one line below that. The footer identifies offline sample data.
 
 The session illustration reserves 44% of its inner row width, clamped to 174-300 DIP, at the right of the session pane. Text and status messages end 20 DIP before the artwork; controls remain in the left action area. Progress shows only the current step and spinner when the text area is narrower than 330 DIP, retaining its message and Cancel action. Larger illustrations use the same existing pane rather than changing the workspace hierarchy.
 
@@ -172,7 +172,7 @@ Streaming telemetry and toasts use translucent dark overlays to keep text readab
 
 ## Shapes
 
-Shared buttons use softly squared 6 DIP corners; connection field surrounds use 8 DIP corners. The refreshed setup, connection, host and lobby working panes use 12 DIP corners. Controller buttons/dropdowns use 8 DIP, bindings 7 DIP and functional panes 12 DIP. Controller popups use 10 DIP and dialogs 14 DIP. Small status badges and switch tracks retain their task-specific rounded silhouettes. Standard control boundaries are 1 DIP. Do not impose one global radius on the two existing native renderers.
+Shared buttons and connection fields use softly squared 6 DIP corners. Setup, connection and host menus use rows and divider rules instead of enclosing panes. The lobby console session uses 8 DIP corners. Controller buttons/dropdowns use 8 DIP, bindings 7 DIP and functional panes 12 DIP. Controller popups use 10 DIP and dialogs 14 DIP. Small status badges and switch tracks retain their task-specific rounded silhouettes. Standard control boundaries are 1 DIP. Do not impose one global radius on the two existing native renderers.
 
 ## Components
 
@@ -239,3 +239,5 @@ Offline previews `controller-switch2` and `controller-switch2-compact` select th
 - **Don't** promote local renderer differences or tiny functional captions into new global visual rules.
 
 Not canonized or repaired by this documentation pass: small uppercase controller captions and local button radius/color differences. These remain implementation observations, not instructions to reproduce defects on future surfaces.
+
+Menu refinement evidence: `artifacts/ui-review/polished-menus/{setup,connection,host,client,compact,progress,error}.png`. These are screenshots of the running native app in labeled offline preview states. The controller menu, controller artwork, shared UI kit and global color tokens were not changed in this pass.

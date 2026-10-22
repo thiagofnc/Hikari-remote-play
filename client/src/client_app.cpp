@@ -159,7 +159,7 @@ int ClientApp::run(Config& cfg, ClientHooks hooks)
 
     const UINT dpi = GetDpiForSystem();
     const bool compact_preview = hooks_.preview == "ready-compact";
-    const int w = MulDiv(compact_preview ? 860 : 1280, dpi, 96), h = MulDiv(compact_preview ? 600 : 780, dpi, 96);
+    const int w = MulDiv(compact_preview ? 860 : 1120, dpi, 96), h = MulDiv(compact_preview ? 600 : 700, dpi, 96);
     RECT wa;
     SystemParametersInfoW(SPI_GETWORKAREA, 0, &wa, 0);
     hwnd_ = CreateWindowExW(0, wc.lpszClassName, hooks_.preview.empty() ? L"Hikari" : L"Hikari - Offline preview", WS_OVERLAPPEDWINDOW, wa.left + (wa.right - wa.left - w) / 2,
@@ -686,17 +686,17 @@ void ClientApp::draw_lobby(ui::Painter& p, const Rect& r)
     const bool have = have_status_ && connected;
     p.background(r);
     const float m = p.s(24), right = r.r-m;
-    p.text("Remote play", {m,p.s(18),right,p.s(50)},p.s(22),ui::rgb(th::kText),Weight::SemiBold);
-    p.text("Your console, connection and stream preferences.", {m,p.s(52),right,p.s(76)},p.s(13),ui::rgb(th::kText2));
-    if(p.button(ui_,kActChangeRole,{right-p.s(372),p.s(24),right-p.s(248),p.s(60)},"Change role",ButtonStyle::Secondary,bool(hooks_.change_role))) post_action(kActChangeRole);
+    p.logo({m,p.s(28),m+p.s(24),p.s(52)});
+    p.text("Remote play", {m+p.s(38),p.s(22),right-p.s(384),p.s(54)},p.s(22),ui::rgb(th::kText),Weight::SemiBold);
+    p.text("Your console and stream preferences.", {m+p.s(38),p.s(56),right,p.s(80)},p.s(13),ui::rgb(th::kText2));
+    if(p.button(ui_,kActChangeRole,{right-p.s(372),p.s(24),right-p.s(248),p.s(60)},"Change role",ButtonStyle::Ghost,bool(hooks_.change_role))) post_action(kActChangeRole);
     if(p.button(ui_,kActController,{right-p.s(236),p.s(24),right-p.s(124),p.s(60)},"Controller")) post_action(kActController);
     if(p.button(ui_,kActConnection,{right-p.s(112),p.s(24),right,p.s(60)},"Connection")) post_action(kActSettings);
 
     const float split = m+(r.w()-m*3)*0.62f, side=split+p.s(16);
     const float top=p.s(100), bottom=r.b-p.s(52), session_bottom=top+p.s(220);
-    p.fill({m,top,split,session_bottom},ui::rgb(th::kBg2),p.s(12));
-    p.fill({m,session_bottom+p.s(16),split,bottom},ui::rgb(th::kBg2),p.s(12));
-    p.fill({side,top,right,bottom},ui::rgb(th::kBg2),p.s(12));
+    p.fill({m,top,split,session_bottom},ui::rgb(th::kBg2),p.s(8));
+    p.line(split+p.s(8),top+p.s(12),split+p.s(8),bottom,ui::rgb(th::kBorder,0.5f),p.s(1));
     const float x=m+p.s(22), inner=split-p.s(22), sx=side+p.s(22), sr=right-p.s(22);
     const bool awake=have && st.console==ConsoleState::Ready;
     const std::string host=have && st.host_name[0] ? st.host_name : host_label_;
@@ -779,17 +779,17 @@ void ClientApp::draw_lobby(ui::Painter& p, const Rect& r)
     const char* labels[]={"Controller bridge","Capture card","HDMI signal","Hardware encoder"};
     const bool checks[]={bool(st.bridge_ok),bool(st.capture_ok),bool(st.signal_ok),bool(st.encoder_ok)};
     const bool can_sleep=have && (st.wake_methods&4) && awake;
-    const float check_pitch=can_sleep?std::clamp((bottom-top-p.s(276))/3,p.s(40),p.s(62)):p.s(62);
+    const float check_pitch=p.s(48);
     for(int i=0;i<4;++i) {
         const float ry=top+p.s(158)+check_pitch*i;
-        p.text(labels[i],{sx,ry,sr,ry+p.s(22)},p.s(13),ui::rgb(th::kText));
-        p.circle(sx+p.s(4),ry+p.s(35),p.s(3),ui::rgb(!have?th::kText3:checks[i]?th::kGood:th::kWarn));
-        p.text(!have?"Waiting for host":checks[i]?"Ready":"Not ready",{sx+p.s(15),ry+p.s(24),sr,ry+p.s(46)},p.s(12),ui::rgb(th::kText2));
+        p.text(labels[i],{sx,ry,sr-p.s(80),ry+p.s(30)},p.s(13),ui::rgb(th::kText));
+        p.text(!have?"Waiting":checks[i]?"Ready":"Not ready",{sr-p.s(70),ry,sr,ry+p.s(30)},p.s(12),ui::rgb(!have?th::kText3:checks[i]?th::kGood:th::kWarn),Weight::Regular,Align::Trailing);
+        if(i<3) p.line(sx,ry+p.s(40),sr,ry+p.s(40),ui::rgb(th::kBorder,0.4f),p.s(1));
     }
     if(can_sleep)
         if(p.button(ui_,kActSleep,{sx,bottom-p.s(54),sr,bottom-p.s(18)},"Put console to sleep")) post_action(kActSleep);
-    p.logo({m,r.b-p.s(34),m+p.s(18),r.b-p.s(16)});
-    p.text(!hooks_.preview.empty()?"Offline preview - Sample device status":"Hikari",{m+p.s(26),r.b-p.s(38),right,r.b-p.s(12)},p.s(12),ui::rgb(th::kText3));
+    p.line(m,r.b-p.s(44),right,r.b-p.s(44),ui::rgb(th::kBorder,0.5f),p.s(1));
+    p.text(!hooks_.preview.empty()?"Offline preview - Sample device status":"Hikari",{m,r.b-p.s(38),right,r.b-p.s(12)},p.s(12),ui::rgb(th::kText3));
     // State changes can replace Play with Retry, Settings or Cancel.
     if (std::none_of(ui_.hits.begin(), ui_.hits.end(),
             [this](const auto& hit) { return hit.first == ui_.focus_id; })) {
