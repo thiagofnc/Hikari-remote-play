@@ -115,4 +115,17 @@ PhysicalInput physical_from_string(const std::string& s);
 // Profiles are stored in client.ini as [mapping.<name>].
 std::vector<std::string> list_mapping_profiles(const Config& cfg);
 
+// Stable machine token written to config files: "pad:south", "key:0x57",
+// "none". physical_from_string() accepts these and the to_string() display
+// names, so both round-trip.
+std::string to_token(PhysicalInput p);
+// Config key for a Switch input inside a [mapping.<name>] section ("a",
+// "zl", "lstick_up", ...). Pad bindings are stored as "pad.<key>",
+// keyboard bindings as "kb.<key>".
+const char* config_key(SwitchInput s);
+// Keyboard defaults shared by both pad layouts (see input_mapping.cpp).
+std::array<PhysicalInput, kSwitchInputCount> default_keyboard_bindings();
+// True when every binding, option and the profile name match.
+bool mapping_equal(const InputMapping& a, const InputMapping& b);
+
 }  // namespace hikari
