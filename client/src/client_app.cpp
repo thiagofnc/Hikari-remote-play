@@ -307,6 +307,9 @@ void ClientApp::do_action(int action)
     case kActController:
         open_controller_settings();
         break;
+    case kActChangeRole:
+        if (hooks_.change_role && hooks_.change_role(hwnd_)) PostMessageW(hwnd_, WM_CLOSE, 0, 0);
+        break;
     case kActWake: net_.power(proto::PowerAction::Wake); break;
     case kActSleep: net_.power(proto::PowerAction::Sleep); break;
     case kActPresetLatency:
@@ -685,6 +688,7 @@ void ClientApp::draw_lobby(ui::Painter& p, const Rect& r)
     const float m = p.s(24), right = r.r-m;
     p.text("Remote play", {m,p.s(18),right,p.s(50)},p.s(22),ui::rgb(th::kText),Weight::SemiBold);
     p.text("Your console, connection and stream preferences.", {m,p.s(52),right,p.s(76)},p.s(13),ui::rgb(th::kText2));
+    if(p.button(ui_,kActChangeRole,{right-p.s(372),p.s(24),right-p.s(248),p.s(60)},"Change role",ButtonStyle::Secondary,bool(hooks_.change_role))) post_action(kActChangeRole);
     if(p.button(ui_,kActController,{right-p.s(236),p.s(24),right-p.s(124),p.s(60)},"Controller")) post_action(kActController);
     if(p.button(ui_,kActConnection,{right-p.s(112),p.s(24),right,p.s(60)},"Connection")) post_action(kActSettings);
 

@@ -25,6 +25,8 @@ struct ClientHooks {
     std::string preview;
     // Opens the app's Settings window (modal). Returns true if settings changed.
     std::function<bool(HWND parent)> open_settings;
+    // Returns true after a different role was selected; close before switching.
+    std::function<bool(HWND parent)> change_role;
 };
 
 class ClientApp {
@@ -53,6 +55,7 @@ private:
         kActRetry,
         kActFullscreen,
         kActConnection,
+        kActChangeRole,
     };
 
     void load_settings();

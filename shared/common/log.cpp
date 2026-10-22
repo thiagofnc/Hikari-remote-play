@@ -30,6 +30,7 @@ const char* tag(Level l)
 void init(const char* role)
 {
     std::lock_guard<std::mutex> lk(g_mu);
+    if (g_file) { std::fclose(g_file); g_file = nullptr; }
     g_dir = app_data_dir() + "\\logs";
     ensure_directory(g_dir);
     g_path = g_dir + "\\" + role + ".log";

@@ -30,8 +30,8 @@ private:
         const float x=p.s(24), right=r.r-x;
         p.logo({x,p.s(24),x+p.s(24),p.s(48)});
         p.text("Hikari",{x+p.s(34),p.s(22),right,p.s(50)},p.s(18),ui::rgb(th::kText),ui::Weight::SemiBold);
-        p.text("Set up this PC",{x,p.s(80),right,p.s(112)},p.s(22),ui::rgb(th::kText),ui::Weight::SemiBold);
-        p.text("Choose the role this computer will use.",{x,p.s(116),right,p.s(142)},p.s(13),ui::rgb(th::kText2));
+        p.text("How will you use this PC?",{x,p.s(80),right,p.s(112)},p.s(22),ui::rgb(th::kText),ui::Weight::SemiBold);
+        p.text("Host your Switch here, or connect to another PC to play.",{x,p.s(116),right,p.s(142)},p.s(13),ui::rgb(th::kText2));
         const float middle=(x+right)/2, y=p.s(164), bottom=p.s(378);
         const auto choice=[&](int id,float left,float edge,const char* name,const char* description,const char* requirement) {
             const Rect box{left,y,edge,bottom};
@@ -49,10 +49,11 @@ private:
         };
         choice(1,x,middle-p.s(8),"Host","Connect your Switch and capture card to this PC.","Requires capture hardware");
         choice(2,middle+p.s(8),right,"Client","Play remotely from a host you have already set up.","Requires a paired host PC");
-        p.text("Your choice is saved on this PC.",{x,p.s(402),right,p.s(430)},p.s(12),ui::rgb(th::kText3));
+        p.text("Your choice is saved. Use Change role on either screen to switch.",{x,p.s(402),right,p.s(430)},p.s(12),ui::rgb(th::kText3));
 
     }
     void on_action(int id) override { role = id == 1 ? "host" : "client"; close(); }
+    void on_key(UINT key) override { if (key == VK_ESCAPE) close(); }
 };
 
 class ClientSettings final : public D2DWindow {
@@ -168,6 +169,7 @@ bool client_settings(HWND owner, Config& cfg)
 class HostWindow final : public D2DWindow {
 public:
     explicit HostWindow(HostApp& host, bool preview = false) : host_(host), preview_(preview) {}
+    std::function<bool(HWND)> change_role;
     ~HostWindow() override { if (tray_.hWnd) Shell_NotifyIconW(NIM_DELETE, &tray_); }
     void add_tray()
     {
@@ -198,6 +200,7 @@ private:
         } else s = host_.snapshot();
         const float x=p.s(24),right=r.r-x,split=x+(right-x-p.s(16))*0.55f,side=split+p.s(16);
         p.text("Host settings",{x,p.s(20),right,p.s(52)},p.s(22),ui::rgb(th::kText),ui::Weight::SemiBold);
+        p.button(ui_,5,{right-p.s(144),p.s(24),right,p.s(60)},"Change role");
         p.text(s.host_name,{x,p.s(56),right,p.s(80)},p.s(13),ui::rgb(th::kText2));
         p.fill({x,p.s(104),split,p.s(546)},ui::rgb(th::kBg2),p.s(12));
         p.fill({side,p.s(104),right,p.s(546)},ui::rgb(th::kBg2),p.s(12));
@@ -243,6 +246,7 @@ private:
     }
     void on_action(int id) override
     {
+        if (id == 5 && change_role && change_role(hwnd())) { close(); return; }
         if (preview_) return;
         if (id == 1) host_.wake_console();
         if (id == 2) host_.redetect_devices();
@@ -374,37 +378,55 @@ int run(const std::vector<std::string>& args)
         window.close();
         return FindResourceW(nullptr, MAKEINTRESOURCEW(101), RT_RCDATA) ? 0 : 1;
     }
-    if (setup || (role != "host" && role != "client")) {
-        RoleWindow chooser;
-        if (!chooser.create(L"Welcome to Hikari", 680, 454)) return 1;
-        chooser.run_modal();
-        if (chooser.role.empty()) return 0;
-        role = chooser.role;
-    }
-    cfg.set("general", "role", role);
-    cfg.save();
-    log::init(role.c_str());
-    HK_LOGI("Hikari %s starting as %s", HIKARI_VERSION, role.c_str());
-    if (role == "host") {
-        HostApp host;
-        if (!host.start(cfg)) {
-            MessageBoxW(nullptr, L"The host could not start. Check the Hikari logs for details.", L"Hikari", MB_ICONERROR);
+    for (;;) {
+        if (setup || (role != "host" && role != "client")) {
+            RoleWindow chooser;
+            if (!chooser.create(L"Welcome to Hikari", 680, 454)) return 1;
+            chooser.run_modal();
+            if (chooser.role.empty()) return 0;
+            role = chooser.role;
+        }
+        cfg.set("general", "role", role);
+        if (!cfg.save()) {
+            MessageBoxW(nullptr, L"Could not save this PC's role. Check access to the Hikari data folder.", L"Hikari", MB_ICONERROR);
             return 1;
         }
-        HostWindow window(host);
-        if (!window.create(L"Hikari Host", 900, 724)) return 1;
-        window.add_tray();
-        window.run_modal();
-        host.stop();
-        cfg.save();
-        return 0;
+        setup = false;
+        std::string next_role;
+        const auto change_role = [&](HWND owner) {
+            RoleWindow chooser;
+            if (!chooser.create(L"Hikari - Change role", 680, 454, owner)) return false;
+            chooser.run_modal();
+            if (chooser.role.empty() || chooser.role == role) return false;
+            next_role = chooser.role;
+            return true;
+        };
+        log::init(role.c_str());
+        HK_LOGI("Hikari %s starting as %s", HIKARI_VERSION, role.c_str());
+        int result = 0;
+        if (role == "host") {
+            HostApp host;
+            if (!host.start(cfg)) {
+                MessageBoxW(nullptr, L"The host could not start. Check the Hikari logs for details.", L"Hikari", MB_ICONERROR);
+                return 1;
+            }
+            HostWindow window(host);
+            window.change_role = change_role;
+            if (!window.create(L"Hikari Host", 900, 724)) return 1;
+            window.add_tray();
+            window.run_modal();
+            host.stop();
+            cfg.save();
+        } else {
+            ClientApp client;
+            ClientHooks hooks;
+            hooks.open_settings = [&cfg](HWND owner) { return client_settings(owner, cfg); };
+            hooks.change_role = change_role;
+            result = client.run(cfg, std::move(hooks));
+        }
+        if (next_role.empty()) return result;
+        role = next_role;
     }
-    if (cfg.get("client", "host").empty() || cfg.get("client", "pairing_code").empty())
-        if (!client_settings(nullptr, cfg)) return 0;
-    ClientApp client;
-    ClientHooks hooks;
-    hooks.open_settings = [&cfg](HWND owner) { return client_settings(owner, cfg); };
-    return client.run(cfg, std::move(hooks));
 }
 }  // namespace
 }  // namespace hikari

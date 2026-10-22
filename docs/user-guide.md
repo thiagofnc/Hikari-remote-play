@@ -22,7 +22,7 @@ Windows SmartScreen may warn about a new, unsigned executable. Choose *More info
 > **Is this PC connected to your Switch, or is it where you'll play?**
 > **[ Host ]**  **[ Client ]**
 
-Your answer is remembered. Launch `Hikari.exe --setup` to choose again, or use `--host` / `--client` to select a role directly.
+Your answer is remembered. Click **Change role** at the top of either the Host or Client screen to choose again. Closing the chooser keeps the current role; choosing the other role stops the current session and opens that role. Saved pairing and controller settings are preserved. You can change roles before configuring a client connection. `Hikari.exe --setup` also opens the chooser, and `--host` / `--client` selects a role directly.
 
 ### On the Host (the PC at home)
 
