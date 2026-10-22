@@ -336,6 +336,7 @@ int run_preview(const std::string& screen)
     cfg.set("client", "host_name", "Living room");
     cfg.set("client", "pairing_code", "DEMO-CODE-ONLY");
     cfg.set_bool("client", "fullscreen", false);
+    cfg.set("client", "console_model", "switch");  // previews start from Switch; switch2 previews select it explicitly
     if (screen == "setup") {
         RoleWindow window;
         if (!window.create(L"Hikari - Setup preview", 680, 400)) return 1;
@@ -373,7 +374,7 @@ int run_preview(const std::string& screen)
         show_controller_settings(nullptr, cfg, mapping, deps);
         return 0;
     }
-    if (screen != "switch2" && screen != "connection-needed" && screen != "ready" && screen != "ready-compact" && screen != "asleep" && screen != "waking" && screen != "failed" && screen != "stream" && screen != "stream-clean")
+    if (screen != "switch2" && screen != "connection-needed" && screen != "ready" && screen != "ready-compact" && screen != "asleep" && screen != "waking" && screen != "failed" && screen != "stream" && screen != "stream-menu" && screen != "stream-end" && screen != "ended")
         return 2;
     ClientApp client;
     ClientHooks hooks;

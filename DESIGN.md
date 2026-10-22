@@ -192,7 +192,11 @@ Buttons keep the original flat graphite treatment at the user's request: primary
 
 ### In-game overlay
 
-While streaming, moving the mouse reveals a bottom-centred toolbar for 2.5 seconds: Stats (toggle, amber dot when on), Controller, Full screen, Screenshot and, set apart, End stream. It is drawn only while visible, so idle play keeps the bare video path. The stats panel (F1 or the toolbar) shows four headline figures, a 0 to 100 ms glass-to-glass trace and two columns of labelled detail; offline previews fill it with sample values marked "Sample data". Toasts sit at the top centre.
+Nothing is drawn over the game by default, and the mouse is not needed: it may be a console input. The stream menu opens with Ctrl+Alt+M or by holding Minus and Plus for one second, and opening it pauses input to the console (every held button is released through `GamepadInput::set_sending(false)`). It is a centred 420 DIP panel over a 50% dim: Resume (Esc), Show or hide stats (F1), Controller settings, Full screen (F11) and End stream (Ctrl+Alt+Q). Arrows or D-pad move, Enter or A selects, Esc or B backs out; the selected row uses the secondary button surface. Ctrl+Alt+Q, or End stream, asks "End the stream?" with Keep playing and End stream (focused). Ending leaves the console on and the host connected; the lobby then says "Stream ended. Your console is still on." and its primary action reads Resume (A also works). F1 still toggles stats directly. The stats panel shows four headline figures, a 0 to 100 ms glass-to-glass trace and two columns of labelled detail; offline previews mark sample values "Sample data". Toasts sit at the top centre.
+
+### Console model
+
+Controller settings has a Switch / Switch 2 segmented toggle in the artwork card header. It swaps the supplied artwork immediately and saves `client.console_model`; the lobby illustration and console name follow it. This is a user choice, not hardware detection.
 
 ### Inputs / Fields
 

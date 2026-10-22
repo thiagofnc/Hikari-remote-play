@@ -154,6 +154,7 @@ void GamepadInput::set_sending(bool on)
     if (!on) {
         // Leaving the stream (or losing focus): release everything on the console.
         std::lock_guard<std::mutex> lk(mu_);
+        resync_nav_ = true;  // buttons held during play are not new menu presses
         proto::Input in;
         in.seq = ++seq_;
         in.client_time_us = now_us();
@@ -370,7 +371,23 @@ void GamepadInput::produce(uint64_t now, bool force)
     proto::PadState pad = mapping_.apply(raw, keyboard_);
     pad.buttons |= injected_.load(std::memory_order_relaxed);
 
+    // Holding Minus + Plus for a second opens or closes the stream menu, also while streaming.
+    constexpr uint32_t kChord = HK_BTN_MINUS | HK_BTN_PLUS;
+    if ((pad.buttons & kChord) != kChord) {
+        chord_since_ = 0;
+        chord_fired_ = false;
+    } else if (!chord_since_) {
+        chord_since_ = now;
+    } else if (!chord_fired_ && now - chord_since_ >= 1'000'000) {
+        chord_fired_ = true;
+        if (menu_chord_) menu_chord_();
+    }
+
     if (!sending_) {
+        if (resync_nav_) {
+            resync_nav_ = false;
+            last_nav_ = pad;
+        }
         // Lobby: report button-down edges for UI navigation (A = Play, ...).
         if (nav_) {
             static constexpr SwitchInput kNav[] = {SwitchInput::A,        SwitchInput::B,         SwitchInput::Plus,

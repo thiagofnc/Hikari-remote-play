@@ -197,6 +197,7 @@ enum class El : uint8_t {
     DlgCancel,
     DlgField,
     DlgBody,
+    Model,  // idx 0 = Switch, 1 = Switch 2
 };
 
 struct Hit {
@@ -229,6 +230,7 @@ struct Layout {
     D2D1_RECT_F slider_label{}, slider_track{}, slider_hit{}, slider_value{};
     float options_divider = 0;
     D2D1_RECT_F group_hdr[kGroupCount]{};
+    D2D1_RECT_F model[2]{};
     std::array<D2D1_RECT_F, kSwitchInputCount> row_label{}, row_btn{};
     std::array<int, kSwitchInputCount> row_col{};
     D2D1_RECT_F art_area{}, art_hint{}, pill_anchor{};
@@ -240,7 +242,7 @@ struct Layout {
 class SettingsWindow {
 public:
     SettingsWindow(Config& cfg, InputMapping& mapping, const ControllerSettingsDeps& deps)
-        : cfg_(cfg), mapping_(mapping), deps_(deps), work_(mapping), committed_(mapping)
+        : cfg_(cfg), mapping_(mapping), deps_(deps), work_(mapping), committed_(mapping), model_(deps.model)
     {
         order_ = nav_order();
     }
@@ -331,9 +333,10 @@ private:
     ComPtr<ID2D1HwndRenderTarget> rt_;
     ComPtr<ID2D1SolidColorBrush> brush_;
     ComPtr<ID2D1StrokeStyle> round_;
-    ComPtr<IDWriteTextFormat> f_title_, f_sub_, f_caption_, f_body_, f_body_sb_, f_small_, f_key_, f_art_, f_wrap_,
+    ComPtr<IDWriteTextFormat> f_title_, f_sub_, f_caption_, f_body_, f_body_sb_, f_small_, f_small_sb_, f_key_, f_art_, f_wrap_,
         f_dlg_title_;
     joycon::JoyConArt art_;
+    joycon::Model model_;
     Layout lay_;
 
     // live data
@@ -417,13 +420,14 @@ bool SettingsWindow::create_factories()
     f_body_ = make_format(text_family, DWRITE_FONT_WEIGHT_NORMAL, 13.5f);
     f_body_sb_ = make_format(text_family, DWRITE_FONT_WEIGHT_SEMI_BOLD, 13.5f);
     f_small_ = make_format(text_family, DWRITE_FONT_WEIGHT_NORMAL, 12.0f);
+    f_small_sb_ = make_format(text_family, DWRITE_FONT_WEIGHT_SEMI_BOLD, 12.0f);
     f_key_ = make_format(text_family, DWRITE_FONT_WEIGHT_SEMI_BOLD, 12.0f);
     f_art_ = make_format(text_family, DWRITE_FONT_WEIGHT_BOLD, 12.0f);
     f_wrap_ = make_format(text_family, DWRITE_FONT_WEIGHT_NORMAL, 13.5f, true);
-    if (!f_title_ || !f_dlg_title_ || !f_sub_ || !f_caption_ || !f_body_ || !f_body_sb_ || !f_small_ || !f_key_ ||
+    if (!f_title_ || !f_dlg_title_ || !f_sub_ || !f_caption_ || !f_body_ || !f_body_sb_ || !f_small_ || !f_small_sb_ || !f_key_ ||
         !f_art_ || !f_wrap_)
         return false;
-    return art_.create(d2d_.Get(), deps_.model);
+    return art_.create(d2d_.Get(), model_);
 }
 
 bool SettingsWindow::create_device()
@@ -802,6 +806,8 @@ void SettingsWindow::compute_layout()
     // Art card.
     const D2D1_RECT_F ain = inset(L.art_card, 20, 18);
     L.pill_anchor = {ain.left, ain.top, ain.right, ain.top + 28};
+    L.model[0] = {ain.left, ain.top, ain.left + 76, ain.top + 28};
+    L.model[1] = {L.model[0].right, ain.top, L.model[0].right + 84, ain.top + 28};
     L.art_area = {ain.left, ain.top + 44, ain.right, ain.bottom - 34};
     L.art_hint = {ain.left, ain.bottom - 24, ain.right, ain.bottom};
 
@@ -920,6 +926,8 @@ Hit SettingsWindow::hit_test(float x, float y) const
     for (int i = 0; i < 3; ++i)
         if (contains(L.toggles[i], x, y)) return {El::Toggle, i};
     if (contains(L.slider_hit, x, y)) return {El::Slider, 0};
+    for (int i = 0; i < 2; ++i)
+        if (contains(L.model[i], x, y)) return {El::Model, i};
     if (contains(L.reset, x, y)) return {El::Reset, 0};
     if (contains(L.save, x, y)) return {El::Save, 0};
     if (contains(L.close, x, y)) return {El::Close, 0};
@@ -958,6 +966,17 @@ void SettingsWindow::activate(const Hit& h)
         drop_ = drop_ == Drop::Profile ? Drop::None : Drop::Profile;
         break;
     case El::Backdrop: drop_ = Drop::None; break;
+    case El::Model: {
+        const joycon::Model next = h.idx == 1 ? joycon::Model::Switch2 : joycon::Model::Switch;
+        if (next == model_) break;
+        model_ = next;
+        // Reload the matching supplied artwork; the lobby illustration follows this setting.
+        art_.create(d2d_.Get(), model_);
+        if (rt_) art_.create_device(rt_.Get());
+        cfg_.set("client", "console_model", model_ == joycon::Model::Switch2 ? "switch2" : "switch");
+        if (!cfg_.save()) HK_LOGE("controller settings: could not write %s", cfg_.path().c_str());
+        break;
+    }
     case El::DropItem: {
         const Drop d = drop_;
         drop_ = Drop::None;
@@ -1453,7 +1472,22 @@ void SettingsWindow::draw_art_card()
     card(lay_.art_card);
 
     const D2D1_RECT_F a = lay_.pill_anchor;
-    text(deps_.model == joycon::Model::Switch2 ? L"Switch 2" : L"Controller", {a.left + 2, a.top, a.right, a.bottom}, f_caption_.Get(), col(kText2));
+    // Console model: a small segmented toggle.
+    const D2D1_RECT_F seg = {lay_.model[0].left, lay_.model[0].top, lay_.model[1].right, lay_.model[1].bottom};
+    fill_rr(seg, 8, col(kBg));
+    stroke_rr(seg, 8, col(kPanelBorder), 1.0f);
+    for (int i = 0; i < 2; ++i) {
+        const D2D1_RECT_F r = inset(lay_.model[i], 3, 3);
+        const bool sel = (model_ == joycon::Model::Switch2) == (i == 1);
+        if (sel) {
+            fill_rr(r, 6, col(0x303339));
+            stroke_rr(r, 6, col(0xFFFFFF, 0.08f), 1.0f);
+        } else if (hover_ == Hit{El::Model, i}) {
+            fill_rr(r, 6, col(kControl));
+        }
+        text(i == 1 ? L"Switch 2" : L"Switch", r, sel ? f_small_sb_.Get() : f_small_.Get(), col(sel ? kText : kText2),
+             DWRITE_TEXT_ALIGNMENT_CENTER);
+    }
 
     // Status pill, right-aligned.
     std::wstring status;
@@ -1470,7 +1504,7 @@ void SettingsWindow::draw_art_card()
     } else {
         status = L"No controller detected — press any button";
     }
-    const float max_w = (a.right - a.left) - 110;
+    const float max_w = (a.right - a.left) - 210;
     const float tw = std::min(text_width(status, f_small_.Get()), max_w);
     const D2D1_RECT_F pill = {a.right - tw - 36, a.top, a.right, a.bottom};
     fill_rr(pill, 14, live ? col(dot, 0.10f) : col(kControl));

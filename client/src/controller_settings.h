@@ -16,7 +16,7 @@ namespace hikari {
 struct ControllerSettingsDeps {
     // Optional initial client size in DIPs (0 keeps the standard layout).
     int initial_width = 0, initial_height = 0;
-    joycon::Model model = joycon::Model::Switch;
+    joycon::Model model = joycon::Model::Switch;  // initial selection; the window saves changes to client.console_model
     std::function<RawPadState()> poll_pad;                   // latest raw state of the active physical controller (thread-safe, cheap)
     std::function<std::vector<std::string>()> list_devices;  // names of currently connected controllers (may be empty)
     std::function<void(const std::string&)> select_device;   // user picked a device in the dropdown (may be null)

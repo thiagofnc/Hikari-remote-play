@@ -58,6 +58,11 @@ private:
         kActChangeRole,
         kActStats,
         kActScreenshot,
+        kActMenu,        // open or close the stream menu
+        kActResume,      // close the stream menu
+        kActEndAsk,      // show the end-stream confirmation
+        kActEndCancel,   // back from the confirmation
+        kActEndConfirm,  // end the stream; the session stays ready to resume
     };
 
     void load_settings();
@@ -67,8 +72,11 @@ private:
     void draw_lobby(ui::Painter& p, const ui::Rect& r);
     void draw_stream_overlay(ui::Painter& p, const ui::Rect& r);
     void draw_stats(ui::Painter& p, const ui::Rect& r);
-    void draw_stream_toolbar(ui::Painter& p, const ui::Rect& r);
-    bool stream_toolbar_visible() const;
+    void draw_stream_menu(ui::Painter& p, const ui::Rect& r);
+    void open_menu(bool confirm_end);
+    void close_menu();
+    void menu_key(UINT vk);           // UI thread
+    std::vector<int> menu_items();    // caller holds mu_
     void post_action(int action);
     void do_action(int action);  // UI thread
     void set_screen(Screen s);
@@ -96,6 +104,9 @@ private:
     std::atomic<Screen> screen_{Screen::Lobby};
     std::atomic<bool> focused_{true};
     std::atomic<bool> show_stats_{false};
+    std::atomic<bool> menu_open_{false};      // stream menu; console input is paused while open
+    std::atomic<bool> ended_by_user_{false};
+    std::atomic<bool> switch2_{false};  // client.console_model, chosen in controller settings  // lobby offers Resume after a deliberate end
     std::atomic<bool> fullscreen_{false};
     std::atomic<bool> screenshot_{false};
     std::atomic<bool> need_keyframe_{false};
@@ -110,6 +121,8 @@ private:
     proto::HostStats host_stats_{};
     proto::StreamConfig stream_{};
     bool have_status_ = false;
+    int menu_sel_ = 0;
+    bool menu_confirm_ = false;
     std::string toast_;
     double toast_until_ = 0;
     std::string host_label_;

@@ -27,6 +27,7 @@ namespace th = ui::theme;
 namespace {
 constexpr UINT WM_HIKARI_ACTION = WM_APP + 1;
 constexpr UINT WM_HIKARI_REFRESH = WM_APP + 2;
+constexpr UINT WM_HIKARI_MENU_NAV = WM_APP + 3;  // wParam: SwitchInput pressed while the stream menu is open
 
 std::string fmt(const char* f, ...)
 {
@@ -81,6 +82,7 @@ double ClientApp::now_s() const { return double(now_us() - start_qpc_us_) / 1e6;
 
 void ClientApp::load_settings()
 {
+    switch2_ = hooks_.preview == "switch2" || cfg_->get("client", "console_model") == "switch2";
     std::lock_guard<std::mutex> lk(mu_);
     preset_ = preset_from(cfg_->get("client", "preset", "balanced"));
     host_label_ = cfg_->get("client", "host_name");
@@ -131,8 +133,13 @@ void ClientApp::preview_state(const std::string& state)
         status_.issue = proto::HostIssue::NoSignal;
         std::snprintf(status_.message, sizeof(status_.message), "No HDMI signal. Check the dock and HDMI cable, then try again.");
     }
-    screen_ = state == "stream" || state == "stream-clean" ? Screen::Stream : Screen::Lobby;
+    const bool stream = state.rfind("stream", 0) == 0;
+    screen_ = stream ? Screen::Stream : Screen::Lobby;
     show_stats_ = state == "stream";
+    menu_open_ = state == "stream-menu" || state == "stream-end";
+    menu_confirm_ = state == "stream-end";
+    menu_sel_ = menu_confirm_ ? 1 : 0;
+    ended_by_user_ = state == "ended";
     for (int i = 0; i < 120; ++i)  // sample latency trace for the offline stats preview
         e2e_spark_[i] = 34.0f + 3.5f * std::sin(i * 0.31f) + 1.8f * std::sin(i * 1.7f) + (i % 37 == 0 ? 9.0f : 0.0f);
     spark_pos_ = 0;
@@ -208,6 +215,10 @@ int ClientApp::run(Config& cfg, ClientHooks hooks)
 
     input_.start([this](const proto::Input& in) { net_.send_input(in); },
                  [this](SwitchInput b) {
+                     if (screen_ == Screen::Stream && menu_open_) {
+                         PostMessageW(hwnd_, WM_HIKARI_MENU_NAV, static_cast<WPARAM>(b), 0);
+                         return;
+                     }
                      // Controller navigation in the lobby: A = Play, D-pad = presets.
                      if (screen_ != Screen::Lobby || !focused_) return;
                      if (b == SwitchInput::A) post_action(kActPlay);
@@ -218,6 +229,9 @@ int ClientApp::run(Config& cfg, ClientHooks hooks)
                          if (next != cur) post_action(kActPresetLatency + next);
                      }
                  });
+    input_.set_menu_chord([this] {
+        if (screen_ == Screen::Stream && focused_) post_action(kActMenu);
+    });
     audio_.start(audio_ms_for(preset_));
     }
 
@@ -261,8 +275,11 @@ void ClientApp::set_screen(Screen s)
 {
     if (screen_.exchange(s) == s) return;
     if (s == Screen::Stream) {
-        toast("Move the mouse for stream controls  \xC2\xB7  Ctrl+Alt+Q ends the stream", 4.0);
+        toast("Stream menu: Ctrl+Alt+M, or hold Minus and Plus", 5.0);
         last_mouse_move_us_ = now_us();
+        ended_by_user_ = false;
+    } else {
+        menu_open_ = false;
     }
     update_sending();
 }
@@ -270,7 +287,7 @@ void ClientApp::set_screen(Screen s)
 void ClientApp::update_sending()
 {
     const bool background = cfg_->get_bool("client", "input_background", false);
-    input_.set_sending(screen_ == Screen::Stream && (focused_ || background) && net_.state() == ConnState::Connected);
+    input_.set_sending(screen_ == Screen::Stream && !menu_open_ && (focused_ || background) && net_.state() == ConnState::Connected);
 }
 
 void ClientApp::do_action(int action)
@@ -279,10 +296,12 @@ void ClientApp::do_action(int action)
         if (action == kActPlay || action == kActRetry) { preview_state("stream"); return; }
         if (action == kActStop) { preview_state("ready"); return; }
         if (action == kActScreenshot) { toast("Screenshots need live video"); return; }
+        if (action == kActEndConfirm) { preview_state("ended"); return; }
     }
     switch (action) {
     case kActPlay:
     case kActRetry:
+        ended_by_user_ = false;
         if (net_.state() != ConnState::Connected) {
             if (net_.state() == ConnState::Rejected) do_action(kActSettings);
             break;
@@ -330,6 +349,25 @@ void ClientApp::do_action(int action)
     case kActFullscreen: toggle_fullscreen(); break;
     case kActStats: show_stats_ = !show_stats_; break;
     case kActScreenshot: screenshot_ = true; break;
+    case kActMenu:
+        if (menu_open_) close_menu();
+        else open_menu(false);
+        break;
+    case kActResume: close_menu(); break;
+    case kActEndAsk:
+    case kActEndCancel: {
+        std::lock_guard<std::mutex> lk(mu_);
+        menu_confirm_ = action == kActEndAsk;
+        menu_sel_ = menu_confirm_ ? 1 : 4;  // confirmation defaults to End stream; cancel returns to it
+        break;
+    }
+    case kActEndConfirm:
+        // Inputs are already released (the menu paused them); the host keeps the session.
+        close_menu();
+        ended_by_user_ = true;
+        do_action(kActStop);
+        toast("Stream ended. Press Resume or A to continue.", 4.0);
+        break;
     default: break;
     }
 }
@@ -337,7 +375,7 @@ void ClientApp::do_action(int action)
 void ClientApp::open_controller_settings()
 {
     ControllerSettingsDeps deps;
-    if (hooks_.preview == "switch2") deps.model = joycon::Model::Switch2;
+    if (switch2_) deps.model = joycon::Model::Switch2;
     deps.poll_pad = [this] { return input_.raw(); };
     deps.list_devices = [this] { return input_.devices(); };
     deps.select_device = [this](const std::string& name) {
@@ -354,6 +392,61 @@ void ClientApp::open_controller_settings()
         mapping_ = m;
         input_.set_mapping(m);
     }
+    switch2_ = cfg_->get("client", "console_model") == "switch2";
+}
+
+void ClientApp::open_menu(bool confirm_end)
+{
+    if (screen_ != Screen::Stream) return;
+    {
+        std::lock_guard<std::mutex> lk(mu_);
+        menu_confirm_ = confirm_end;
+        menu_sel_ = confirm_end ? 1 : 0;
+        keys_ = KeyboardState{};
+    }
+    menu_open_ = true;
+    // Nothing held on the keyboard or controller stays pressed on the console.
+    input_.set_keyboard(KeyboardState{});
+    input_.set_injected(0);
+    update_sending();
+}
+
+void ClientApp::close_menu()
+{
+    {
+        std::lock_guard<std::mutex> lk(mu_);
+        menu_confirm_ = false;
+    }
+    menu_open_ = false;
+    update_sending();
+}
+
+std::vector<int> ClientApp::menu_items()
+{
+    if (menu_confirm_) return {kActEndCancel, kActEndConfirm};
+    return {kActResume, kActStats, kActController, kActFullscreen, kActEndAsk};
+}
+
+void ClientApp::menu_key(UINT vk)
+{
+    const bool ctrl = GetKeyState(VK_CONTROL) < 0, alt = GetKeyState(VK_MENU) < 0;
+    int activate = kActNone;
+    {
+        std::lock_guard<std::mutex> lk(mu_);
+        const std::vector<int> items = menu_items();
+        const int n = static_cast<int>(items.size());
+        menu_sel_ = std::clamp(menu_sel_, 0, n - 1);
+        const bool horizontal = menu_confirm_;
+        if (vk == (horizontal ? VK_LEFT : VK_UP)) menu_sel_ = (menu_sel_ + n - 1) % n;
+        else if (vk == (horizontal ? VK_RIGHT : VK_DOWN) || vk == VK_TAB) menu_sel_ = (menu_sel_ + 1) % n;
+        else if (vk == VK_RETURN || vk == VK_SPACE) activate = items[static_cast<size_t>(menu_sel_)];
+        else if (vk == VK_ESCAPE) activate = menu_confirm_ ? kActEndCancel : kActResume;
+        else if (vk == 'M' && ctrl && alt) activate = kActResume;
+        else if (vk == 'Q' && ctrl && alt) activate = menu_confirm_ ? kActEndConfirm : kActEndAsk;
+        else if (vk == VK_F1) activate = kActStats;
+        else if (vk == VK_F11) activate = kActFullscreen;
+    }
+    if (activate != kActNone) do_action(activate);
 }
 
 void ClientApp::toggle_fullscreen()
@@ -381,7 +474,15 @@ void ClientApp::toggle_fullscreen()
 void ClientApp::on_key(UINT vk, bool down)
 {
     const bool ctrl = GetKeyState(VK_CONTROL) < 0, alt = GetKeyState(VK_MENU) < 0;
+    if (screen_ == Screen::Stream && menu_open_) {
+        if (down) menu_key(vk);  // nothing reaches the console while the menu is open
+        return;
+    }
     if (down) {
+        if (screen_ == Screen::Stream && ctrl && alt && (vk == 'M' || vk == 'Q')) {
+            open_menu(vk == 'Q');
+            return;
+        }
         if (screen_ == Screen::Lobby && (vk == VK_TAB || vk == VK_SPACE || (vk == VK_RETURN && !alt))) {
             std::lock_guard<std::mutex> lk(mu_);
             auto focused = std::find_if(ui_.hits.begin(), ui_.hits.end(),
@@ -424,7 +525,7 @@ void ClientApp::on_key(UINT vk, bool down)
             return;
         }
         if (vk == 'Q' && ctrl && alt) {
-            post_action(kActStop);
+            post_action(kActStop);  // lobby: leave a starting session
             return;
         }
     }
@@ -499,7 +600,7 @@ LRESULT ClientApp::handle_message(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         return 0;
     }
     case WM_SETCURSOR:
-        if (LOWORD(lp) == HTCLIENT && screen_ == Screen::Stream && now_us() - last_mouse_move_us_ > 2'000'000) {
+        if (LOWORD(lp) == HTCLIENT && screen_ == Screen::Stream && !menu_open_ && now_us() - last_mouse_move_us_ > 2'000'000) {
             SetCursor(nullptr);
             return TRUE;
         }
@@ -531,6 +632,15 @@ LRESULT ClientApp::handle_message(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     case WM_HIKARI_ACTION:
         do_action(static_cast<int>(wp));
         return 0;
+    case WM_HIKARI_MENU_NAV: {
+        // Controller: D-pad moves, A selects, B backs out.
+        const auto b = static_cast<SwitchInput>(wp);
+        const UINT vk = b == SwitchInput::DpadUp ? VK_UP : b == SwitchInput::DpadDown ? VK_DOWN
+            : b == SwitchInput::DpadLeft ? VK_LEFT : b == SwitchInput::DpadRight ? VK_RIGHT
+            : b == SwitchInput::A ? VK_RETURN : b == SwitchInput::B ? VK_ESCAPE : 0;
+        if (vk && menu_open_) menu_key(vk);
+        return 0;
+    }
     case WM_HIKARI_REFRESH:
         if (net_.state() != ConnState::Connected && screen_ == Screen::Stream) update_sending();
         if (lp == 1) set_screen(Screen::Stream);
@@ -629,9 +739,8 @@ void ClientApp::render_thread()
             std::lock_guard<std::mutex> lk(mu_);
             toast_until = toast_until_;
         }
-        // The toolbar redraws only while the mouse is active, so idle play keeps the bare video path.
         const bool overlay_live = !hooks_.preview.empty() || show_stats_ || now_s() < toast_until ||
-                                  net_.state() != ConnState::Connected || stream_toolbar_visible();
+                                  net_.state() != ConnState::Connected || menu_open_;
 
         if (streaming) {
             if (fresh || (overlay_live && now - last_render > 50'000)) {
@@ -718,12 +827,13 @@ void ClientApp::draw_lobby(ui::Painter& p, const Rect& r)
     // The console sits slightly in from the card edge.
     const float art_width=std::clamp((inner-x)*0.44f,p.s(174),p.s(300)), art_right=inner-p.s(24);
     const float text_right=art_right-art_width-p.s(20);
-    const bool switch2_preview=hooks_.preview=="switch2";
-    const std::string console_name=switch2_preview?"Switch 2":"Switch";
+    const bool switch2=switch2_;
+    const std::string console_name=switch2?"Switch 2":"Switch";
     p.text(host.empty()?"Your "+console_name:host+"'s "+console_name,{x,top+p.s(18),text_right,top+p.s(48)},p.s(18),ui::rgb(th::kText),Weight::SemiBold);
     std::string state="Waiting for the host";
+    const bool resume=ended_by_user_ && have && st.console==ConsoleState::Ready && st.phase==SessionPhase::Lobby;
     if(have) switch(st.console) {
-    case ConsoleState::Ready: state="Ready to play"; break;
+    case ConsoleState::Ready: state=resume?"Stream ended. Your console is still on.":"Ready to play"; break;
     case ConsoleState::Asleep: state="Asleep. Play will wake your console."; break;
     case ConsoleState::Off: state="Off or undocked"; break;
     case ConsoleState::Waking: state="Waking your console"; break;
@@ -732,7 +842,7 @@ void ClientApp::draw_lobby(ui::Painter& p, const Rect& r)
     }
     p.text(state,{x,top+p.s(52),text_right,top+p.s(92)},p.s(13),ui::rgb(th::kText2),Weight::Regular,Align::Leading,Align::Leading,true);
     p.console({art_right-art_width,top+p.s(18),art_right,session_bottom-p.s(18)},awake?th::kGood:th::kWarn,
-              switch2_preview?ui::ConsoleModel::Switch2:ui::ConsoleModel::Switch);
+              switch2?ui::ConsoleModel::Switch2:ui::ConsoleModel::Switch);
     const bool progress=have && st.phase!=SessionPhase::Lobby && st.phase!=SessionPhase::Failed;
     float y=top+p.s(100);
     if(progress) {
@@ -763,7 +873,7 @@ void ClientApp::draw_lobby(ui::Painter& p, const Rect& r)
             p.text(st.message[0]?st.message:"Could not start the session",{x,y-p.s(12),text_right,y+p.s(34)},p.s(13),ui::rgb(th::kBad),Weight::Regular,Align::Leading,Align::Center,true);
             y+=p.s(40);
         }
-        if(p.button(ui_,action,{x,y,x+p.s(164),y+p.s(38)},setup?"Set up connection":failed?"Try again":"Play",ButtonStyle::Primary,setup||have)) post_action(action);
+        if(p.button(ui_,action,{x,y,x+p.s(164),y+p.s(38)},setup?"Set up connection":failed?"Try again":resume?"Resume":"Play",ButtonStyle::Primary,setup||have)) post_action(action);
         if(have && !setup && !failed) {
             // "Or press [A] on your controller." with a drawn button cap.
             const Rect hint{x,y+p.s(46),text_right,y+p.s(64)};
@@ -847,12 +957,6 @@ void ClientApp::draw_lobby(ui::Painter& p, const Rect& r)
 
 // ---- stream overlay -----------------------------------------------------------
 
-bool ClientApp::stream_toolbar_visible() const
-{
-    // Offline previews keep it up so the controls can be reviewed.
-    return !hooks_.preview.empty() || now_us() - last_mouse_move_us_ < 2'500'000;
-}
-
 void ClientApp::draw_stream_overlay(ui::Painter& p, const Rect& r)
 {
     if (!hooks_.preview.empty()) {
@@ -878,7 +982,7 @@ void ClientApp::draw_stream_overlay(ui::Painter& p, const Rect& r)
         p.text("Reconnecting...", Rect{r.l, r.cy() + p.s(16), r.r, r.cy() + p.s(46)}, p.s(18), ui::rgb(th::kText),
                Weight::SemiBold, Align::Center);
     }
-    draw_stream_toolbar(p, r);
+    if (menu_open_) draw_stream_menu(p, r);
     if (now_s() < until && !toast.empty()) {
         const float alpha = static_cast<float>(std::min(1.0, (until - now_s()) * 2));
         const float w = p.text_width(toast, p.s(13), Weight::Medium) + p.s(36);
@@ -889,40 +993,66 @@ void ClientApp::draw_stream_overlay(ui::Painter& p, const Rect& r)
     }
 }
 
-void ClientApp::draw_stream_toolbar(ui::Painter& p, const Rect& r)
+void ClientApp::draw_stream_menu(ui::Painter& p, const Rect& r)
 {
     std::lock_guard<std::mutex> lk(mu_);
     ui_.begin_frame();
-    if (stream_toolbar_visible()) {
-        struct Item { int action; const char* label; ButtonStyle style; };
-        const Item items[] = {
-            {kActStats, "Stats", show_stats_ ? ButtonStyle::Secondary : ButtonStyle::Ghost},
-            {kActController, "Controller", ButtonStyle::Ghost},
-            {kActFullscreen, fullscreen_ ? "Exit full screen" : "Full screen", ButtonStyle::Ghost},
-            {kActScreenshot, "Screenshot", ButtonStyle::Ghost},
-            {kActStop, "End stream", ButtonStyle::Danger},
-        };
-        const float pad = p.s(6), gap = p.s(4), h = p.s(34), divider = p.s(13);
-        float widths[5], total = pad * 2 + divider;
-        for (int i = 0; i < 5; ++i) {
-            widths[i] = p.text_width(items[i].label, p.s(14), Weight::SemiBold) + p.s(28);
-            total += widths[i] + (i ? gap : 0);
+    p.fill(r, ui::rgb(0x000000, 0.5f));
+    const std::vector<int> items = menu_items();
+    menu_sel_ = std::clamp(menu_sel_, 0, static_cast<int>(items.size()) - 1);
+    const float w = p.s(420), row_h = p.s(44);
+    const float h = menu_confirm_ ? p.s(176) : p.s(96) + row_h * items.size() + p.s(58);
+    const Rect panel{r.cx() - w / 2, r.cy() - h / 2, r.cx() + w / 2, r.cy() + h / 2};
+    p.shadow(panel, p.s(14), 0.6f);
+    p.fill(panel, ui::rgb(th::kBg2), p.s(14));
+    p.stroke(panel, ui::rgb(0xFFFFFF, 0.08f), p.s(1), p.s(14));
+    const float in = panel.l + p.s(24), out = panel.r - p.s(24);
+
+    // Keycaps right-aligned at x, returns the left edge.
+    const auto keys = [&](float x, float cy, std::initializer_list<const char*> caps) {
+        for (auto it = std::rbegin(caps); it != std::rend(caps); ++it) {
+            const float kw = std::max(p.s(20), p.text_width(*it, p.s(11.5f), Weight::SemiBold) + p.s(12));
+            x -= kw;
+            p.keycap(x, cy, *it);
+            x -= p.s(4);
         }
-        const Rect bar{r.cx() - total / 2, r.b - p.s(24) - h - pad * 2, r.cx() + total / 2, r.b - p.s(24)};
-        p.shadow(bar, bar.h() / 2, 0.45f);
-        p.fill(bar, ui::rgb(0x16171A, 0.94f), bar.h() / 2);
-        p.stroke(bar, ui::rgb(0xFFFFFF, 0.08f), p.s(1), bar.h() / 2);
-        float x = bar.l + pad;
-        for (int i = 0; i < 5; ++i) {
-            if (i == 4) {  // End stream sits apart from the view controls
-                p.line(x + divider / 2 - gap / 2, bar.t + p.s(12), x + divider / 2 - gap / 2, bar.b - p.s(12), ui::rgb(0xFFFFFF, 0.1f), p.s(1));
-                x += divider;
-            }
-            const Rect b{x, bar.t + pad, x + widths[i], bar.b - pad};
-            if (p.button(ui_, items[i].action, b, items[i].label, items[i].style)) post_action(items[i].action);
-            if (items[i].action == kActStats && show_stats_) p.circle(b.r - p.s(9), b.t + p.s(9), p.s(2.5f), ui::rgb(th::kAccent));
-            x = b.r + gap;
+        return x;
+    };
+
+    if (menu_confirm_) {
+        p.text("End the stream?", {in, panel.t + p.s(22), out, panel.t + p.s(48)}, p.s(17), ui::rgb(th::kText), Weight::SemiBold);
+        p.text("Your console stays on and connected. Press Resume in the lobby, or A on your controller, to pick up where you left off.",
+               {in, panel.t + p.s(54), out, panel.t + p.s(112)}, p.s(13), ui::rgb(th::kText2), Weight::Regular, Align::Leading, Align::Leading, true);
+        const float by = panel.b - p.s(60);
+        const Rect keep{out - p.s(268), by, out - p.s(136), by + p.s(38)}, end{out - p.s(124), by, out, by + p.s(38)};
+        ui_.focus_id = items[static_cast<size_t>(menu_sel_)];
+        if (p.button(ui_, kActEndCancel, keep, "Keep playing")) post_action(kActEndCancel);
+        if (p.button(ui_, kActEndConfirm, end, "End stream", ButtonStyle::Danger)) post_action(kActEndConfirm);
+    } else {
+        p.text("Stream paused", {in, panel.t + p.s(22), out, panel.t + p.s(48)}, p.s(17), ui::rgb(th::kText), Weight::SemiBold);
+        p.text("Nothing you press reaches the console while this menu is open.", {in, panel.t + p.s(50), out, panel.t + p.s(72)},
+               p.s(12.5f), ui::rgb(th::kText2));
+        ui_.focus_id = -1;
+        float y = panel.t + p.s(88);
+        for (size_t i = 0; i < items.size(); ++i) {
+            const int id = items[i];
+            const Rect row{panel.l + p.s(10), y, panel.r - p.s(10), y + row_h - p.s(4)};
+            const bool selected = static_cast<int>(i) == menu_sel_;
+            if (p.button(ui_, id, row, "", selected ? ButtonStyle::Secondary : ButtonStyle::Ghost)) post_action(id);
+            const char* label = id == kActResume ? "Resume" : id == kActStats ? (show_stats_ ? "Hide stats" : "Show stats")
+                : id == kActController ? "Controller settings" : id == kActFullscreen ? (fullscreen_ ? "Exit full screen" : "Full screen")
+                : "End stream";
+            p.text(label, {in, row.t, out - p.s(120), row.b}, p.s(14), ui::rgb(id == kActEndAsk ? 0xFF8A80 : th::kText), Weight::Medium);
+            const float cy = row.cy() - p.s(1);
+            if (id == kActResume) keys(out, cy, {"Esc"});
+            else if (id == kActStats) keys(out, cy, {"F1"});
+            else if (id == kActFullscreen) keys(out, cy, {"F11"});
+            else if (id == kActEndAsk) keys(out, cy, {"Ctrl", "Alt", "Q"});
+            y += row_h;
         }
+        const float fy = panel.b - p.s(46);
+        p.divider(panel.l + p.s(1), panel.r - p.s(1), fy);
+        p.text("Arrows and Enter, or D-pad and A. Esc or B resumes.", {in, fy, out, panel.b}, p.s(12), ui::rgb(th::kText3));
     }
     ui_.take_click();
 }
