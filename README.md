@@ -1,4 +1,4 @@
-<h1 align="center"><img src="assets/hikari_logo_mark.png" alt="Hikari logo" width="96" align="middle">&nbsp;&nbsp;Hikari Remote Play</h1>
+<h1 align="center"><img src="assets/hikari_logo_mark.png" alt="Hikari logo" width="112" align="middle">&nbsp;&nbsp;<big>Hikari Remote Play</big></h1>
 
 <p align="center">
   <b>Your Switch 2, anywhere.</b><br>
