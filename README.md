@@ -127,7 +127,7 @@ From a clone of this repo, `scripts\flash-firmware.ps1` does the same from Power
 | --- | --- |
 | Choose **Host**. The checklist should go green: bridge, capture card, audio and encoder. Note the **pairing code** and the PC's addresses (LAN and Tailscale `100.x`). | Choose **Client**. Pick your host from the LAN list, or type its address or Tailscale name, then enter the pairing code. Press **Play** (or **A** on your controller). |
 
-For Internet play, install [Tailscale](https://tailscale.com/download) on both PCs and sign in with the same account. You don't need port forwarding. See the [user guide](docs/user-guide.md) for the full walkthrough.
+For Internet play, use **Set up Tailscale** on the host and **Install Tailscale** on the client to open the official download or installed app, then sign in with the same account on both PCs. Nearby host selection prefers its Tailscale address, so the saved connection works at home and away. You don't need port forwarding or Hikari hosting. Tailscale is a separate, one-time setup. See the [user guide](docs/user-guide.md) for the full walkthrough.
 
 ## What you need
 

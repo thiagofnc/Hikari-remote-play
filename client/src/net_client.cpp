@@ -9,6 +9,7 @@
 #include "hikari/log.h"
 #include "hikari/secure_packet.h"
 #include "hikari/system.h"
+#include "hikari/tailscale.h"
 
 namespace hikari {
 
@@ -272,13 +273,18 @@ void ClientNet::handle(const uint8_t* buf, size_t len, const NetAddress& from, u
     switch (h.type) {
     case PacketType::DiscoverReply: {
         proto::DiscoverReply d;
-        if (!proto::read(r, d)) return;
+        if (!proto::read(r, d) || d.version != proto::kVersion) return;
         NetAddress a = from;
         DiscoveredHost dh;
         dh.name = d.host_name;
         dh.host_id = hex(d.host_id, sizeof(d.host_id));
         const std::string s = a.to_string();
         dh.address = s.substr(0, s.rfind(':')) + (d.port == proto::kDefaultPort ? "" : ":" + std::to_string(d.port));
+        if (is_tailscale_ipv4(d.tailscale_ipv4)) {
+            dh.address = std::string(d.tailscale_ipv4) +
+                (d.port == proto::kDefaultPort ? "" : ":" + std::to_string(d.port));
+            dh.tailscale = true;
+        }
         dh.last_seen_us = now;
         std::lock_guard<std::mutex> lk(disc_mu_);
         discovered_[dh.host_id] = dh;

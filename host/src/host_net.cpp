@@ -7,6 +7,7 @@
 #include "hikari/log.h"
 #include "hikari/secure_packet.h"
 #include "hikari/system.h"
+#include "hikari/tailscale.h"
 #include "hk_link.h"
 
 namespace hikari {
@@ -21,6 +22,12 @@ constexpr uint64_t kHandshakeTimeoutUs = 5'000'000;
 HostNet::HostNet() : input_owd_(3'000'000), capture_to_sent_(2'000'000) {}
 
 HostNet::~HostNet() { stop(); }
+
+void HostNet::set_tailscale_address(const std::string& ip)
+{
+    std::lock_guard<std::mutex> lk(mu_);
+    tailscale_ip_ = is_tailscale_ipv4(ip) ? ip : "";
+}
 
 bool HostNet::start(uint16_t port, const crypto::Digest& psk, const std::string& host_name, const uint8_t host_id[8],
                     HostNetEvents events)
@@ -207,6 +214,10 @@ void HostNet::handle(const uint8_t* buf, size_t len, const NetAddress& from, uin
         std::snprintf(rep.host_name, sizeof(rep.host_name), "%s", host_name_.c_str());
         rep.port = sock_.local_port();
         std::memcpy(rep.host_id, host_id_, 8);
+        {
+            std::lock_guard<std::mutex> lk(mu_);
+            std::snprintf(rep.tailscale_ipv4, sizeof(rep.tailscale_ipv4), "%s", tailscale_ip_.c_str());
+        }
         uint8_t out[128];
         ByteWriter w(out, sizeof(out));
         proto::write_header(w, PacketType::DiscoverReply, 0);

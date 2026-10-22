@@ -81,6 +81,7 @@ public:
 
     bool client_connected() const { return connected_.load(); }
     HostNetStats stats();
+    void set_tailscale_address(const std::string& ip);
 
 private:
     struct Session {
@@ -113,6 +114,7 @@ private:
     HostNetEvents ev_;
     crypto::Digest psk_{};
     std::string host_name_;
+    std::string tailscale_ip_; // guarded by mu_; refreshed outside the input thread
     uint8_t host_id_[8]{};
 
     mutable std::mutex mu_;  // guards session_, pending_, config_

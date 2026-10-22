@@ -38,17 +38,25 @@ The Host screen runs an automatic checklist:
 Below the checklist the Host shows:
 
 - **Pairing code**, e.g. `K7QM-2XPA-9TRB`. Clients need it once. You can generate a new one in Settings, which un-pairs every client.
-- **This PC's addresses**: LAN (e.g. `192.168.1.20`) and Tailscale (`100.x.y.z` and its MagicDNS name, when Tailscale is running).
+- **This PC's addresses**: LAN (e.g. `192.168.1.20`) and Tailscale (`100.x.y.z`, when its adapter is available). A configured MagicDNS name can also be entered on the client.
 
 Close the window to keep the host running in the **tray**. Click the tray icon to reopen the status window, or right-click it to quit. Automatic startup at login is not yet exposed in the app.
 
 ### On the Client (the PC where you play)
 
+For remote play, click **Set up Tailscale** on the Host and **Install Tailscale** on the Client. The button opens the official download page if Tailscale is missing, or the installed Tailscale app otherwise. Install it on both PCs and sign in with the same personal account. Hikari does not bundle a VPN installer or handle your Tailscale credentials. No Hikari hosting account, domain or router port forwarding is required.
+
+The Client shows its own Tailscale IPv4 address once its adapter is available. This confirms that an address is assigned; it does not verify that both PCs belong to the same Tailscale network or that the host is reachable.
+
 1. Pick your host:
-   - **On the same network**: it appears in the list automatically (LAN discovery).
+   - **On the same network**: it appears in the list automatically (LAN discovery). When the host has Tailscale running, selecting it fills in its Tailscale address, labeled **Tailscale**. That saved destination works at home and away. Entries labeled **LAN only** require the same local network.
    - **Over the Internet**: type its Tailscale name (e.g. `living-room-pc`) or `100.x.y.z` address. Any reachable IP or hostname works.
 2. Enter the **pairing code** once. Dashes and letter case don't matter, and `O`/`0`, `I`/`L`/`1` are treated the same.
 3. Done. The client remembers the host and goes straight to the lobby next time.
+
+If you previously saved a LAN address, open Connection settings and select the host again after Tailscale is set up, or enter the Tailscale address shown on the host. Leaving home does not automatically convert an existing LAN address into a Tailscale address.
+
+Tailscale supplies encryption and attempts direct connections, using its relay fallback when necessary. Relayed connections may have higher latency. See [Tailscale setup](https://tailscale.com/docs/install/windows) and its [current personal-use plans](https://tailscale.com/pricing). The host PC must remain awake with Hikari and Tailscale running.
 
 ## Playing
 

@@ -11,6 +11,7 @@
 #include "hikari/crypto.h"
 #include "hikari/log.h"
 #include "hikari/system.h"
+#include "hikari/tailscale.h"
 
 namespace hikari {
 
@@ -105,7 +106,7 @@ std::vector<HostAddress> local_addresses()
             HostAddress h;
             h.ip = ip;
             h.adapter = name;
-            h.tailscale = (v & 0xFFC00000u) == 0x64400000u || name.find("Tailscale") != std::string::npos;
+            h.tailscale = is_tailscale_adapter(a->FriendlyName, a->Description) && is_tailscale_ipv4(ip);
             out.push_back(h);
         }
     }
@@ -846,6 +847,9 @@ HostSnapshot HostApp::snapshot()
     s.host_name = host_name_;
     s.pairing_code = pairing_code_;
     s.addresses = local_addresses();
+    std::string tailscale_ip;
+    for (const auto& a : s.addresses) if (a.tailscale) { tailscale_ip = a.ip; break; }
+    net_.set_tailscale_address(tailscale_ip);
     s.port = port_;
     s.bridge = bridge_.status();
     s.bridge_ok = s.bridge.connected;

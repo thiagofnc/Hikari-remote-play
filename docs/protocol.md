@@ -477,3 +477,9 @@ FEC turns on or strengthens immediately, but only turns off after 5 s of clean r
 | 3 | 720p30 | — | — |
 
 Stepping back **up** requires the bitrate to exceed 1.4 × the threshold of the step above for 6 s. Widths are scaled from the native aspect ratio and rounded to a multiple of 16. Each mode change is announced with `StreamConfig` and starts with an IDR.
+
+## Tailscale discovery extension
+
+`DiscoverReply` retains its original 44-byte body (`version:u16`, `port:u16`, `host_name:32`, `host_id:8`). A host with a Tailscale IPv4 address appends the four bytes `HTS1` followed by a zero-padded 16-byte IPv4 string. New clients accept the legacy body and prefer a valid advertised `100.64.0.0/10` address when the extension is present, preserving the advertised UDP port. Old clients continue using the original prefix. Truncated extensions are rejected.
+
+Discovery remains unauthenticated. The advertised route does not establish trust: the normal pairing challenge-response must still succeed. Adapter enumeration runs outside the host input thread; the UI snapshot refreshes the advertised address.

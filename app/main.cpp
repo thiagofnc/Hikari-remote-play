@@ -13,6 +13,7 @@
 #include "hikari/log.h"
 #include "hikari/media.h"
 #include "hikari/system.h"
+#include "hikari/tailscale.h"
 
 namespace hikari {
 namespace {
@@ -74,6 +75,10 @@ public:
 private:
     void draw(ui::Painter& p, const Rect& r) override
     {
+        if (!offline_ && GetTickCount64() >= next_tailscale_check_) {
+            tailscale_ = tailscale_info();
+            next_tailscale_check_ = GetTickCount64() + 2000;
+        }
         p.background(r);
         const float x=p.s(24),right=r.r-x, split=right-p.s(236), in=x+p.s(22), edge=split-p.s(22);
         p.text("Connection settings",{x,p.s(20),right,p.s(52)},p.s(22),ui::rgb(th::kText),ui::Weight::SemiBold);
@@ -86,7 +91,7 @@ private:
         p.fill(host_rect,ui::rgb(th::kSurface),p.s(8));
         p.stroke(host_rect,ui::rgb(GetFocus()==host_?th::kAccent:th::kBorder),p.s(1),p.s(8));
         place(host_,host_rect);
-        p.text("LAN IP address or Tailscale name",{in,p.s(252),edge,p.s(274)},p.s(12),ui::rgb(th::kText3));
+        p.text("Use the host's Tailscale address for remote play.",{in,p.s(252),edge,p.s(286)},p.s(12),ui::rgb(th::kText3),ui::Weight::Regular,ui::Align::Leading,ui::Align::Leading,true);
         p.text("Pairing code",{in,p.s(296),edge,p.s(320)},p.s(13),ui::rgb(th::kText));
         const Rect code_rect{in,p.s(328),edge,p.s(368)};
         p.fill(code_rect,ui::rgb(th::kSurface),p.s(8));
@@ -104,9 +109,12 @@ private:
             const float y=p.s(174+100*float(i));
             p.button(ui_,100+int(i),{nx-p.s(4),y,nr+p.s(4),y+p.s(86)},"",ui::ButtonStyle::Secondary);
             p.text(hosts_[i].name,{nx+p.s(8),y+p.s(8),nr-p.s(8),y+p.s(36)},p.s(13),ui::rgb(th::kText),ui::Weight::Medium);
-            p.text(hosts_[i].address,{nx+p.s(8),y+p.s(38),nr-p.s(8),y+p.s(72)},p.s(12),ui::rgb(th::kText2),ui::Weight::Regular,ui::Align::Leading,ui::Align::Center,true);
+            p.text((hosts_[i].tailscale?"Tailscale: ":"LAN only: ")+hosts_[i].address,{nx+p.s(8),y+p.s(38),nr-p.s(8),y+p.s(72)},p.s(12),ui::rgb(th::kText2),ui::Weight::Regular,ui::Align::Leading,ui::Align::Center,true);
         }
         p.text(error_,{x,p.s(452),right,p.s(490)},p.s(12),ui::rgb(th::kBad),ui::Weight::Regular,ui::Align::Leading,ui::Align::Center,true);
+        p.button(ui_,3,{x,p.s(506),x+p.s(148),p.s(544)},tailscale_.installed?"Open Tailscale":"Install Tailscale");
+        p.text(offline_?"Offline preview":tailscale_.ipv4.empty()?"Sign in on both PCs with the same account.":"This PC: "+tailscale_.ipv4,
+               {x+p.s(160),p.s(500),right-p.s(278),p.s(548)},p.s(12),ui::rgb(th::kText2),ui::Weight::Regular,ui::Align::Leading,ui::Align::Center,true);
         p.button(ui_,2,{right-p.s(262),p.s(506),right-p.s(166),p.s(544)},"Cancel");
         p.button(ui_,1,{right-p.s(154),p.s(506),right,p.s(544)},"Save and connect",ui::ButtonStyle::Primary);
 
@@ -114,6 +122,10 @@ private:
     void on_action(int id) override
     {
         if (id == 2) { close(); return; }
+        if (id == 3) {
+            if (!offline_ && !open_tailscale_setup()) error_ = "Could not open Tailscale. Visit tailscale.com/download/windows.";
+            return;
+        }
         if (id >= 100 && size_t(id - 100) < hosts_.size()) {
             set_text(host_, hosts_[size_t(id - 100)].address);
             return;
@@ -141,6 +153,8 @@ private:
     std::vector<DiscoveredHost> hosts_;
     std::string error_;
     bool offline_ = false;
+    TailscaleInfo tailscale_;
+    ULONGLONG next_tailscale_check_ = 0;
 };
 
 bool client_settings(HWND owner, Config& cfg)
@@ -205,7 +219,7 @@ private:
             y+=p.s(88);
         }
         p.text("Pair a client",{sx,p.s(122),sr,p.s(150)},p.s(15),ui::rgb(th::kText),ui::Weight::SemiBold);
-        p.text("Enter these details on your other PC.",{sx,p.s(158),sr,p.s(204)},p.s(12),ui::rgb(th::kText2),ui::Weight::Regular,ui::Align::Leading,ui::Align::Leading,true);
+        p.text("Use Tailscale on both PCs, signed into the same account.",{sx,p.s(158),sr,p.s(204)},p.s(12),ui::rgb(th::kText2),ui::Weight::Regular,ui::Align::Leading,ui::Align::Leading,true);
         p.text("Pairing code",{sx,p.s(214),sr,p.s(238)},p.s(12),ui::rgb(th::kText2));
         p.fill({sx,p.s(246),sr,p.s(292)},ui::rgb(th::kSurface),p.s(8));
         p.text(s.pairing_code,{sx+p.s(12),p.s(246),sr-p.s(12),p.s(292)},p.s(20),ui::rgb(th::kText),ui::Weight::SemiBold);
@@ -219,6 +233,7 @@ private:
         p.line(sx,p.s(454),sr,p.s(454),ui::rgb(th::kBorder),p.s(1));
         p.circle(sx+p.s(4),p.s(482),p.s(3),ui::rgb(s.client_connected?th::kGood:th::kText3));
         p.text(s.client_connected?"Connected: "+s.client_name:"Waiting for a client",{sx+p.s(16),p.s(468),sr,p.s(496)},p.s(13),ui::rgb(th::kText));
+        p.button(ui_,4,{sx,p.s(510),sx+p.s(164),p.s(544)},"Set up Tailscale");
         p.text(s.message,{x,p.s(558),right,p.s(604)},p.s(12),ui::rgb(th::kText2),ui::Weight::Regular,ui::Align::Leading,ui::Align::Center,true);
         p.button(ui_,2,{x,p.s(620),x+p.s(118),p.s(658)},"Find devices");
         p.button(ui_,3,{right-p.s(294),p.s(620),right-p.s(142),p.s(658)},"New pairing code");
@@ -231,6 +246,8 @@ private:
         if (preview_) return;
         if (id == 1) host_.wake_console();
         if (id == 2) host_.redetect_devices();
+        if (id == 4 && !open_tailscale_setup())
+            MessageBoxW(hwnd(), L"Open tailscale.com/download/windows to install Tailscale.", L"Hikari", MB_OK);
         if (id == 3 && MessageBoxW(hwnd(), L"Replace the pairing code? Clients will need the new code to reconnect.", L"Hikari", MB_YESNO | MB_ICONQUESTION) == IDYES)
             host_.regenerate_pairing_code();
     }

@@ -31,6 +31,7 @@ const char* to_string(ConnState s);
 struct DiscoveredHost {
     std::string name;
     std::string address;  // "ip:port"
+    bool tailscale = false;
     std::string host_id;  // hex
     uint64_t last_seen_us = 0;
 };

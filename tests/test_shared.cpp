@@ -6,6 +6,7 @@
 #include "hikari/histogram.h"
 #include "hikari/net_protocol.h"
 #include "hikari/sync.h"
+#include "hikari/tailscale.h"
 #include "test_framework.h"
 
 using namespace hikari;
@@ -179,6 +180,50 @@ TEST(bounded_queue_capacity)
     int cleared = 0;
     q.clear([&](int) { ++cleared; });
     CHECK_EQ(cleared, 2);
+}
+
+TEST(discovery_tailscale_extension_and_legacy_compatibility)
+{
+    uint8_t bytes[128]{};
+    proto::DiscoverReply host{};
+    host.port = 49000;
+    std::strcpy(host.host_name, "Living room");
+    ByteWriter legacy(bytes, sizeof(bytes));
+    proto::write(legacy, host);
+    const size_t legacy_size = legacy.size();
+    CHECK_EQ(legacy_size, 44u);
+    proto::DiscoverReply decoded{};
+    std::strcpy(decoded.tailscale_ipv4, "100.64.1.2");
+    ByteReader old_reader(bytes, legacy_size);
+    CHECK(proto::read(old_reader, decoded));
+    CHECK_EQ(decoded.tailscale_ipv4[0], 0);
+
+    std::strcpy(host.tailscale_ipv4, "100.101.102.103");
+    ByteWriter extended(bytes, sizeof(bytes));
+    proto::write(extended, host);
+    CHECK(extended.ok());
+    ByteReader new_reader(bytes, extended.size());
+    CHECK(proto::read(new_reader, decoded));
+    CHECK(std::string(decoded.tailscale_ipv4) == "100.101.102.103");
+    CHECK_EQ(decoded.port, 49000);
+    // Old decoders consume the original prefix and ignore the extension.
+    ByteReader prefix(bytes, legacy_size);
+    CHECK(proto::read(prefix, decoded));
+    for (size_t size = legacy_size + 1; size < extended.size(); ++size) {
+        ByteReader truncated(bytes, size);
+        CHECK(!proto::read(truncated, decoded));
+    }
+}
+
+TEST(tailscale_address_and_adapter_validation)
+{
+    CHECK(is_tailscale_ipv4("100.64.0.0"));
+    CHECK(is_tailscale_ipv4("100.127.255.255"));
+    for (const auto* ip : {"100.63.255.255", "100.128.0.0", "192.168.1.1", "100.64.1.2:47800", "host", ""})
+        CHECK(!is_tailscale_ipv4(ip));
+    CHECK(is_tailscale_adapter(L"TAILSCALE", nullptr));
+    CHECK(is_tailscale_adapter(L"Ethernet 3", L"Tailscale Tunnel"));
+    CHECK(!is_tailscale_adapter(L"Ethernet", L"Network card"));
 }
 
 int main(int argc, char** argv) { return hktest::run_all(argc > 1 ? argv[1] : nullptr); }

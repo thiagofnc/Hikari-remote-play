@@ -323,6 +323,7 @@ struct DiscoverReply {
     uint16_t port = kDefaultPort;
     char host_name[32]{};
     uint8_t host_id[8]{};  // stable id so the client can match saved pairings
+    char tailscale_ipv4[16]{}; // optional v1 discovery extension; empty for LAN-only hosts
 };
 
 // ---- codecs --------------------------------------------------------------

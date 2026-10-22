@@ -8,6 +8,7 @@ add_library(hikari_shared STATIC
     common/log.cpp
     common/system.cpp
     common/udp.cpp
+    common/tailscale.cpp
     protocol/abr.cpp
     protocol/net_protocol.cpp
     protocol/video_transport.cpp
@@ -20,4 +21,4 @@ target_include_directories(hikari_shared PUBLIC
     telemetry)
 
 target_link_libraries(hikari_shared PUBLIC
-    hikari_link ws2_32 avrt winmm bcrypt qwave shell32 ole32)
+    hikari_link ws2_32 avrt winmm bcrypt qwave shell32 ole32 iphlpapi)

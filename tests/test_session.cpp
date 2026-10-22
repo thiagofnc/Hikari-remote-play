@@ -37,6 +37,29 @@ TEST(loopback_pairing_input_video_and_reconnect)
     CHECK(port != 0);
     if (!port) return;
     const std::string address = "127.0.0.1:" + std::to_string(port);
+    // Discovery advertises the persistent remote address and custom port,
+    // while the ordinary authenticated UDP session remains compatible.
+    host.set_tailscale_address("100.101.102.103");
+    UdpSocket probe;
+    CHECK(probe.open(0));
+    NetAddress target, from;
+    CHECK(NetAddress::resolve(address, port, target));
+    uint8_t packet[128]{};
+    ByteWriter discover(packet, sizeof(packet));
+    proto::write_header(discover, proto::PacketType::Discover, 0);
+    CHECK(probe.send_to(target, packet, discover.size()));
+    const int count = probe.recv_from(packet, sizeof(packet), from, 1000);
+    CHECK(count > 0);
+    if (count > 0) {
+        ByteReader reply(packet, static_cast<size_t>(count));
+        proto::Header header;
+        proto::DiscoverReply advertised;
+        CHECK(proto::read_header(reply, header));
+        CHECK(header.type == proto::PacketType::DiscoverReply);
+        CHECK(proto::read(reply, advertised));
+        CHECK(std::string(advertised.tailscale_ipv4) == "100.101.102.103");
+        CHECK_EQ(advertised.port, port);
+    }
     ClientNet client;
     CHECK(client.start({}));
     client.connect(address, "000000000000", proto::Preset::Balanced, 0);

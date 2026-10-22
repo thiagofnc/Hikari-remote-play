@@ -444,6 +444,10 @@ void write(ByteWriter& w, const DiscoverReply& v)
     w.u16(v.port);
     w.str(v.host_name, sizeof(v.host_name));
     w.bytes(v.host_id, sizeof(v.host_id));
+    if (v.tailscale_ipv4[0]) {
+        w.u32(0x31535448); // "HTS1", backwards-compatible optional route
+        w.str(v.tailscale_ipv4, sizeof(v.tailscale_ipv4));
+    }
 }
 bool read(ByteReader& r, DiscoverReply& v)
 {
@@ -451,6 +455,12 @@ bool read(ByteReader& r, DiscoverReply& v)
     v.port = r.u16();
     read_str(r, v.host_name);
     r.bytes(v.host_id, sizeof(v.host_id));
+    v.tailscale_ipv4[0] = 0;
+    if (!r.ok()) return false;
+    if (r.remaining()) {
+        if (r.remaining() < 4 || r.u32() != 0x31535448) return false;
+        read_str(r, v.tailscale_ipv4);
+    }
     return r.ok();
 }
 
