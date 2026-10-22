@@ -115,9 +115,9 @@ void ClientApp::preview_state(const std::string& state)
     status_ = {};
     have_status_ = true;
     std::snprintf(status_.host_name, sizeof(status_.host_name), "Living room");
-    status_.console = state == "asleep" ? ConsoleState::Asleep : ConsoleState::Ready;
+    status_.console = (state == "asleep" || state == "switch2") ? ConsoleState::Asleep : ConsoleState::Ready;
     status_.bridge_ok = status_.capture_ok = status_.encoder_ok = 1;
-    status_.signal_ok = state != "asleep";
+    status_.signal_ok = state != "asleep" && state != "switch2";
     status_.wake_methods = 3;
     if (state == "waking") {
         status_.signal_ok = 0;
@@ -695,7 +695,11 @@ void ClientApp::draw_lobby(ui::Painter& p, const Rect& r)
     const float x=m+p.s(22), inner=split-p.s(22), sx=side+p.s(22), sr=right-p.s(22);
     const bool awake=have && st.console==ConsoleState::Ready;
     const std::string host=have && st.host_name[0] ? st.host_name : host_label_;
-    p.text(host.empty()?"Your Switch":host+"'s Switch",{x,top+p.s(18),inner-p.s(150),top+p.s(48)},p.s(18),ui::rgb(th::kText),Weight::SemiBold);
+    const float art_width=std::clamp((inner-x)*0.44f,p.s(174),p.s(300));
+    const float text_right=inner-art_width-p.s(20);
+    const bool switch2_preview=hooks_.preview=="switch2";
+    const std::string console_name=switch2_preview?"Switch 2":"Switch";
+    p.text(host.empty()?"Your "+console_name:host+"'s "+console_name,{x,top+p.s(18),text_right,top+p.s(48)},p.s(18),ui::rgb(th::kText),Weight::SemiBold);
     std::string state="Waiting for the host";
     if(have) switch(st.console) {
     case ConsoleState::Ready: state="Ready to play"; break;
@@ -705,37 +709,44 @@ void ClientApp::draw_lobby(ui::Painter& p, const Rect& r)
     case ConsoleState::AwakeNoVideo: state="Waiting for an HDMI signal"; break;
     default: state="Checking your console"; break;
     }
-    p.text(state,{x,top+p.s(52),inner-p.s(146),top+p.s(78)},p.s(13),ui::rgb(th::kText2));
-    p.console({inner-p.s(138),top+p.s(18),inner,top+p.s(116)},awake?th::kGood:th::kWarn,awake);
+    p.text(state,{x,top+p.s(52),text_right,top+p.s(92)},p.s(13),ui::rgb(th::kText2),Weight::Regular,Align::Leading,Align::Leading,true);
+    p.console({inner-art_width,top+p.s(18),inner,session_bottom-p.s(18)},awake?th::kGood:th::kWarn,awake,
+              switch2_preview?ui::ConsoleModel::Switch2:ui::ConsoleModel::Switch);
     const bool progress=have && st.phase!=SessionPhase::Lobby && st.phase!=SessionPhase::Failed;
     float y=top+p.s(100);
     if(progress) {
         const int current=st.phase==SessionPhase::Waking?0:st.phase==SessionPhase::WaitingForVideo?1:st.phase==SessionPhase::WaitingForController?2:3;
         const char* steps[]={"Wake","Picture","Controller","Stream"};
-        const float step=(inner-x)/4;
-        for(int i=0;i<4;++i) {
+        const float step=(text_right-x)/4;
+        const bool compact_steps=text_right-x<p.s(330);
+        if(compact_steps) {
+            p.spinner(x+p.s(8),y+p.s(10),p.s(7),ui::rgb(th::kAccent));
+            p.text(steps[current],{x+p.s(24),y,text_right,y+p.s(24)},p.s(13),ui::rgb(th::kText));
+        } else for(int i=0;i<4;++i) {
             const float cx=x+step*i+p.s(8);
             if(i<3) p.line(cx+p.s(12),y+p.s(8),cx+step-p.s(12),y+p.s(8),ui::rgb(i<current?th::kAccent:th::kBorder),p.s(1));
             if(i==current) p.spinner(cx,y+p.s(8),p.s(7),ui::rgb(th::kAccent));
             else p.circle(cx,y+p.s(8),p.s(4),ui::rgb(i<current?th::kAccent:th::kBorder));
-            p.text(steps[i],{cx-p.s(8),y+p.s(21),cx+step-p.s(10),y+p.s(43)},p.s(12),ui::rgb(i<=current?th::kText:th::kText3));
+            p.text(steps[i],{cx-p.s(8),y+p.s(21),cx+step-p.s(10),y+p.s(40)},p.s(11),ui::rgb(i<=current?th::kText:th::kText3));
         }
-        p.text(st.message[0]?st.message:proto::to_string(st.phase),{x,y+p.s(46),inner-p.s(100),y+p.s(94)},p.s(12),ui::rgb(th::kText2),Weight::Regular,Align::Leading,Align::Center,true);
-        if(p.button(ui_,kActStop,{inner-p.s(88),y+p.s(60),inner,y+p.s(96)},"Cancel")) post_action(kActStop);
+        const float message_y=y+p.s(compact_steps?28:42);
+        p.text(st.message[0]?st.message:proto::to_string(st.phase),{x,message_y,text_right,message_y+p.s(30)},p.s(12),ui::rgb(th::kText2),Weight::Regular,Align::Leading,Align::Leading,true);
+        const float cancel_y=y+p.s(compact_steps?64:76);
+        if(p.button(ui_,kActStop,{x,cancel_y,x+p.s(88),cancel_y+p.s(34)},"Cancel")) post_action(kActStop);
     } else {
         const bool failed=have && st.phase==SessionPhase::Failed;
         const bool setup=conn==ConnState::Rejected || conn==ConnState::Idle;
         const int action=setup?kActSettings:failed?kActRetry:kActPlay;
         if (ui_.focus_id < 0) ui_.focus_id=action;
         if(failed) {
-            p.text(st.message[0]?st.message:"Could not start the session",{x,y-p.s(12),inner,y+p.s(34)},p.s(13),ui::rgb(th::kBad),Weight::Regular,Align::Leading,Align::Center,true);
+            p.text(st.message[0]?st.message:"Could not start the session",{x,y-p.s(12),text_right,y+p.s(34)},p.s(13),ui::rgb(th::kBad),Weight::Regular,Align::Leading,Align::Center,true);
             y+=p.s(40);
         }
         if(p.button(ui_,action,{x,y,x+p.s(164),y+p.s(38)},setup?"Set up connection":failed?"Try again":"Play",ButtonStyle::Primary,setup||have)) post_action(action);
         p.text(setup?"Enter your host address and pairing code.":failed?"Check the host, then retry.":have?"Or press A on your controller.":"Keep the host app running on your other PC.",
-               {x,y+p.s(46),inner,y+p.s(70)},p.s(12),ui::rgb(th::kText3));
+               {x,y+p.s(46),text_right,y+p.s(80)},p.s(12),ui::rgb(th::kText3),Weight::Regular,Align::Leading,Align::Leading,true);
         if(have && !failed && st.issue!=proto::HostIssue::None)
-            p.text(proto::to_string(st.issue),{x,y+p.s(74),inner,y+p.s(98)},p.s(12),ui::rgb(th::kWarn));
+            p.text(proto::to_string(st.issue),{x,y+p.s(82),text_right,y+p.s(106)},p.s(12),ui::rgb(th::kWarn));
     }
     const float prefs=session_bottom+p.s(16), row_start=prefs+p.s(60);
     p.text("Stream preference",{x,prefs+p.s(16),inner,prefs+p.s(42)},p.s(15),ui::rgb(th::kText),Weight::SemiBold);

@@ -41,6 +41,7 @@ constexpr uint32_t kNeonRed = 0xFF5F52;   // Joy-Con (R)
 enum class Align { Leading, Center, Trailing };
 enum class Weight { Regular = 400, Medium = 500, SemiBold = 600, Bold = 700 };
 enum class ButtonStyle { Primary, Secondary, Ghost, Danger };
+enum class ConsoleModel { Switch, Switch2 };
 
 struct Rect {
     float l = 0, t = 0, r = 0, b = 0;
@@ -106,7 +107,7 @@ public:
     bool toggle(Interaction& ui, int id, const Rect& r, bool on);
     void logo(const Rect& r, float opacity = 1.0f);
     // Stylised Switch in its dock. `screen` shows the awake display.
-    void console(const Rect& r, uint32_t status_color, bool screen_on);
+    void console(const Rect& r, uint32_t status_color, bool screen_on, ConsoleModel model = ConsoleModel::Switch);
 
 private:
     IDWriteTextFormat* format(float size, Weight w, Align h, Align v, bool wrap);

@@ -9,10 +9,6 @@ namespace {
 constexpr int kLogoResource = 101;  // RCDATA: assets/hikari_logo_256.png (app/hikari.rc)
 constexpr float kPi = 3.14159265f;
 
-D2D1_COLOR_F lerp(D2D1_COLOR_F a, D2D1_COLOR_F b, float t)
-{
-    return {a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t, a.b + (b.b - a.b) * t, a.a + (b.a - a.a) * t};
-}
 }  // namespace
 
 D2D1_COLOR_F rgb(uint32_t hex, float a)
@@ -286,46 +282,67 @@ void Painter::logo(const Rect& r, float opacity)
     rt_->DrawBitmap(logo_.Get(), r.d2d(), opacity, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
 }
 
-void Painter::console(const Rect& r, uint32_t status, bool screen_on)
+void Painter::console(const Rect& r, uint32_t status, bool screen_on, ConsoleModel model)
 {
-    // Proportions loosely follow a docked Switch 2: console on top, dock below.
-    const float w = r.w();
-    const float unit = w / 100.0f;
-    const float top = r.t + unit * 6;
-
-
-    // Joy-Con 2 (left/right) and console body.
-    const Rect body{r.l + unit * 12, top, r.r - unit * 12, top + unit * 42};
-    const Rect jl{r.l + unit * 2, top + unit * 0.5f, r.l + unit * 13, top + unit * 41.5f};
-    const Rect jr{r.r - unit * 13, top + unit * 0.5f, r.r - unit * 2, top + unit * 41.5f};
-    fill(jl, rgb(theme::kNeonBlue), unit * 5);
-    fill(Rect{jl.l + unit * 6, jl.t, jl.r, jl.b}, rgb(theme::kNeonBlue));
-    fill(jr, rgb(theme::kNeonRed), unit * 5);
-    fill(Rect{jr.l, jr.t, jr.r - unit * 6, jr.b}, rgb(theme::kNeonRed));
-    fill(body, rgb(0x16181D));
-    // Screen.
-    const Rect screen = body.inset(unit * 2.2f);
-    fill(screen, screen_on ? rgb(0x232831) : rgb(0x0C0D10), unit * 1.2f);
-    if (screen_on) logo(Rect{screen.cx() - unit * 9, screen.cy() - unit * 9, screen.cx() + unit * 9, screen.cy() + unit * 9}, 0.9f);
-    // Sticks and buttons.
-    circle(jl.cx() + unit * 0.5f, jl.t + unit * 11, unit * 3.2f, rgb(0x1A1C21));
-    circle(jr.cx() - unit * 0.5f, jr.t + unit * 26, unit * 3.2f, rgb(0x1A1C21));
-    for (int i = 0; i < 4; ++i) {
-        const float a = i * kPi / 2;
-        circle(jr.cx() - unit * 0.5f + std::cos(a) * unit * 3.2f, jr.t + unit * 11 + std::sin(a) * unit * 3.2f,
-               unit * 1.3f, rgb(0x1A1C21));
-        circle(jl.cx() + unit * 0.5f + std::cos(a) * unit * 3.2f, jl.t + unit * 26 + std::sin(a) * unit * 3.2f,
-               unit * 1.3f, rgb(0x1A1C21));
+    // Front elevation, in a 100 x 64 coordinate space. Dock edges stay
+    // inside the controller rails so sticks and buttons remain visible.
+    const float u = std::min(r.w()/100.0f, r.h()/64.0f);
+    const float ox = r.cx()-50*u, oy = r.cy()-32*u;
+    const auto box = [&](float l,float t,float right,float bottom) {
+        return Rect{ox+l*u,oy+t*u,ox+right*u,oy+bottom*u};
+    };
+    const auto disk = [&](float x,float y,float radius,uint32_t color) {
+        circle(ox+x*u,oy+y*u,radius*u,rgb(color));
+    };
+    const bool second = model == ConsoleModel::Switch2;
+    const uint32_t ink=0x15171B, cap=second?0x303338:0x353A3F;
+    const uint32_t left=second?0x292D31:0x00B8D2, right=second?0x292D31:0xFF5B54;
+    const Rect jl=box(0,2,13,46), jr=box(87,2,100,46), tablet=box(13,2,87,46);
+    fill(jl,rgb(left),u*7);
+    fill(box(7,2,13,46),rgb(left));
+    fill(jr,rgb(right),u*7);
+    fill(box(87,2,93,46),rgb(right));
+    if(second) {
+        stroke(jl,rgb(0x454A50),u*0.45f,u*7);
+        stroke(jr,rgb(0x454A50),u*0.45f,u*7);
     }
-    // Dock.
-    const Rect dock{r.l + unit * 8, top + unit * 24, r.r - unit * 8, top + unit * 58};
-    fill(dock, rgb(0x24272E), unit * 3);
-    fill(Rect{dock.l, dock.t, dock.r, dock.t + unit * 4}, rgb(0x2C3038));
-    stroke(dock, rgb(0x3A3F49), unit * 0.4f, unit * 3);
-    // Status LED on the dock.
-    circle(dock.l + unit * 6, dock.b - unit * 6, unit * 1.3f, rgb(status));
-    circle(dock.l + unit * 6, dock.b - unit * 6, unit * 2.6f, rgb(status, 0.25f));
-    (void)lerp;
+    fill(tablet,rgb(0x101216),u*0.8f);
+    stroke(tablet,rgb(0x3A3E44),u*0.45f,u*0.8f);
+    const Rect display=box(15,4,85,44);
+    fill(display,rgb(screen_on?0x252930:0x090B0D),u*0.5f);
+    // Keep the full mark above the dock lip, rather than obscuring its lower half.
+    if(screen_on) logo(box(37,5,63,31));
+
+    const auto stick=[&](float x,float y,uint32_t ring) {
+        disk(x,y,3.55f,ink);
+        circle(ox+x*u,oy+y*u,3.25f*u,rgb(ring),false,u*0.5f);
+        disk(x,y,2.65f,cap);
+        circle(ox+x*u,oy+y*u,2.65f*u,rgb(0x50565C),false,u*0.25f);
+    };
+    const auto button=[&](float x,float y) {
+        disk(x,y,1.45f,ink); disk(x,y,1.1f,cap);
+    };
+    stick(6.8f,13.0f,second?0x64BEDA:0x40484F);
+    stick(93.2f,28.5f,second?0xF27965:0x40484F);
+    // Right face diamond and left directional diamond are centred on each grip.
+    for(const auto& point : {std::pair<float,float>{0,-3.1f},{3.1f,0},{0,3.1f},{-3.1f,0}}) {
+        button(93.2f+point.first,14.5f+point.second);
+        button(6.8f+point.first,27.0f+point.second);
+    }
+    // Minus, plus, capture, Home, and Switch 2's lower C button.
+    fill(box(8.0f,6.2f,10.8f,7.0f),rgb(ink),u*0.2f);
+    fill(box(89.1f,6.2f,92.0f,7.0f),rgb(ink),u*0.2f);
+    fill(box(90.15f,5.15f,90.95f,8.05f),rgb(ink),u*0.2f);
+    fill(box(8.0f,36.5f,10.8f,39.3f),rgb(ink),u*0.5f);
+    disk(90.5f,37.8f,1.55f,ink);
+    if(second) fill(box(89.1f,42.0f,91.9f,44.8f),rgb(ink),u*0.5f);
+
+    const Rect dock=box(14,32,86,63);
+    fill(dock,rgb(second?0x2B2F34:0x24272E),u*(second?6.0f:2.0f));
+    stroke(dock,rgb(0x42474F),u*0.4f,u*(second?6.0f:2.0f));
+    line(ox+17*u,oy+33*u,ox+83*u,oy+33*u,rgb(0x353A42),u*0.7f);
+    // Flat indicator, without a decorative halo.
+    disk(18,58.5f,0.9f,status);
 }
 
 }  // namespace hikari::ui

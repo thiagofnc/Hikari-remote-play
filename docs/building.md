@@ -105,7 +105,9 @@ Open screens without another computer, capture card or controller bridge:
 .\scripts\preview.ps1 -Screen controller
 ```
 
-Screens: `setup`, `connection`, `host`, `controller`, `controller-compact`, `ready`, `ready-compact`, `connection-needed`, `asleep`, `waking`, `failed`, `stream`. Use `-BuildDir` for a different build directory, or run `Hikari.exe --preview=ready` directly. Preview mode uses the real UI with sample state, starts no streaming/network/device services, and keeps any saved preview settings separate in `%LOCALAPPDATA%\Hikari\preview`. In the lobby, Play opens the stream-overlay preview; Ctrl+Alt+Q returns to the lobby. The stream preview has no game video or measured telemetry.
+Screens: `setup`, `connection`, `host`, `controller`, `controller-compact`, `ready`, `ready-compact`, `connection-needed`, `switch2`, `asleep`, `waking`, `failed`, `stream`. Use `-BuildDir` for a different build directory, or run `Hikari.exe --preview=ready` directly. Preview mode uses the real UI with sample state, starts no streaming/network/device services, and keeps any saved preview settings separate in `%LOCALAPPDATA%\Hikari\preview`. In the lobby, Play opens the stream-overlay preview; Ctrl+Alt+Q returns to the lobby. The stream preview has no game video or measured telemetry.
+
+`switch2` shows the screen-off Switch 2 artwork with sample state. The bridge currently reports USB readiness rather than console identity; this preview does not imply automatic model detection.
 
 ### Fuzzing the link parser
 

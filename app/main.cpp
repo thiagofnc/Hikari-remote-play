@@ -317,7 +317,7 @@ int run_preview(const std::string& screen)
         show_controller_settings(nullptr, cfg, mapping, deps);
         return 0;
     }
-    if (screen != "connection-needed" && screen != "ready" && screen != "ready-compact" && screen != "asleep" && screen != "waking" && screen != "failed" && screen != "stream")
+    if (screen != "switch2" && screen != "connection-needed" && screen != "ready" && screen != "ready-compact" && screen != "asleep" && screen != "waking" && screen != "failed" && screen != "stream")
         return 2;
     ClientApp client;
     ClientHooks hooks;
