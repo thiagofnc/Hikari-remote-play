@@ -4,6 +4,17 @@
 
 namespace hikari::proto {
 
+namespace {
+template <size_t N>
+void read_str(ByteReader& r, char (&dst)[N])
+{
+    char tmp[N + 1];
+    r.str(tmp, N);
+    std::memcpy(dst, tmp, N);
+    dst[N - 1] = 0;
+}
+}  // namespace
+
 void write_header(ByteWriter& w, PacketType type, uint32_t session)
 {
     w.u8(kMagic);
@@ -36,6 +47,7 @@ void write(ByteWriter& w, const Hello& v)
     w.u8(v.video_codecs);
     w.u8(v.audio_codecs);
     w.u16(v.display_hz);
+    if (v.flags) w.u8(v.flags);
 }
 
 bool read(ByteReader& r, Hello& v)
@@ -51,6 +63,8 @@ bool read(ByteReader& r, Hello& v)
     v.video_codecs = r.u8();
     v.audio_codecs = r.u8();
     v.display_hz = r.u16();
+    v.flags = 0;
+    if (r.ok() && r.remaining()) v.flags = r.u8();
     return r.ok();
 }
 
@@ -113,12 +127,24 @@ void write(ByteWriter& w, const Welcome& v)
     w.u32(v.session_id);
     w.bytes(v.mac, kMacSize);
     write(w, v.config);
+    w.str(v.host_name, sizeof(v.host_name));
 }
 bool read(ByteReader& r, Welcome& v)
 {
     v.session_id = r.u32();
     r.bytes(v.mac, kMacSize);
-    return read(r, v.config);
+    if (!read(r, v.config)) return false;
+    v.host_name[0] = 0;
+    if (r.remaining() >= sizeof(v.host_name)) read_str(r, v.host_name);
+    return r.ok();
+}
+
+void write(ByteWriter& w, const Bye& v) { w.u8(static_cast<uint8_t>(v.reason)); }
+bool read(ByteReader& r, Bye& v)
+{
+    // Older peers send an empty Bye.
+    v.reason = r.remaining() ? static_cast<ByeReason>(r.u8()) : ByeReason::Closed;
+    return r.ok();
 }
 
 void write(ByteWriter& w, const Reject& v) { w.u8(static_cast<uint8_t>(v.reason)); }
@@ -379,16 +405,6 @@ bool read(ByteReader& r, SetPreset& v)
     return r.ok() && static_cast<uint8_t>(v.preset) <= 2;
 }
 
-namespace {
-template <size_t N>
-void read_str(ByteReader& r, char (&dst)[N])
-{
-    char tmp[N + 1];
-    r.str(tmp, N);
-    std::memcpy(dst, tmp, N);
-    dst[N - 1] = 0;
-}
-}  // namespace
 
 void write(ByteWriter& w, const HostStatus& v)
 {

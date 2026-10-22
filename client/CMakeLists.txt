@@ -17,6 +17,7 @@ add_library(hikari_client STATIC
     src/audio_player.cpp
     src/client_app.cpp
     src/gamepad_input.cpp
+    src/host_probe.cpp
     src/net_client.cpp
     src/renderer.cpp
     src/video_decoder.cpp)

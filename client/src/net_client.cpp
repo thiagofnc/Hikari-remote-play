@@ -43,6 +43,7 @@ const char* to_string(ConnState s)
     case ConnState::Reconnecting: return "Reconnecting";
     case ConnState::Rejected: return "Pairing code rejected";
     case ConnState::Unreachable: return "Host unreachable";
+    case ConnState::Replaced: return "Another device took over";
     }
     return "?";
 }
@@ -76,10 +77,13 @@ void ClientNet::set_state(ConnState s, const std::string& detail)
     if (ev_.state) ev_.state(s, detail);
 }
 
-void ClientNet::connect(const std::string& host, const std::string& code, proto::Preset preset, uint32_t max_kbps)
+void ClientNet::connect(const std::string& host, const std::string& code, proto::Preset preset, uint32_t max_kbps,
+                        const std::string& fallback)
 {
     std::lock_guard<std::mutex> lk(mu_);
     host_ = host;
+    fallback_ = fallback == host ? "" : fallback;
+    use_fallback_ = false;
     psk_ = crypto::psk_from_code(code);
     preset_ = preset;
     max_kbps_ = max_kbps;
@@ -187,6 +191,22 @@ ClientNetStats ClientNet::stats()
     return s;
 }
 
+std::string ClientNet::remote_ip()
+{
+    std::lock_guard<std::mutex> lk(mu_);
+    if (!addr_.valid()) return {};
+    const std::string s = addr_.to_string();
+    std::string ip = s.substr(0, s.rfind(':'));
+    if (!ip.empty() && ip.front() == '[') ip = ip.substr(1, ip.size() - 2);
+    return ip;
+}
+
+std::string ClientNet::host_name()
+{
+    std::lock_guard<std::mutex> lk(mu_);
+    return remote_name_;
+}
+
 std::vector<DiscoveredHost> ClientNet::discovered()
 {
     const uint64_t now = now_us();
@@ -204,14 +224,16 @@ void ClientNet::handshake_step(uint64_t now)
 
     if (target_changed_ || !addr_.valid()) {
         if (now < next_resolve_) return;
-        const std::string host = host_;
+        const std::string primary = host_;
+        const std::string host = use_fallback_ && !fallback_.empty() ? fallback_ : host_;
         lk.unlock();
         NetAddress a;
         const bool ok = NetAddress::resolve(host, proto::kDefaultPort, a);  // DNS: may block briefly
         lk.lock();
-        if (!want_connect_ || host != host_) return;
+        if (!want_connect_ || primary != host_) return;
         if (!ok) {
-            next_resolve_ = now + 2'000'000;
+            if (!fallback_.empty()) use_fallback_ = !use_fallback_;  // try the other address next
+            next_resolve_ = now + (fallback_.empty() ? 2'000'000 : 200'000);
             lk.unlock();
             set_state(ConnState::Unreachable, "cannot resolve " + host);
             return;
@@ -258,6 +280,7 @@ void ClientNet::handshake_step(uint64_t now)
         crypto::random_bytes(client_nonce_, sizeof(client_nonce_));
         next_resolve_ = 0;
         target_changed_ = true;  // re-resolve: DHCP / Tailscale address may change
+        if (!fallback_.empty()) use_fallback_ = !use_fallback_;
     }
     lk.unlock();
     if (timed_out) set_state(ConnState::Unreachable, "no answer from host");
@@ -321,6 +344,7 @@ void ClientNet::handle(const uint8_t* buf, size_t len, const NetAddress& from, u
             const auto want = crypto::welcome_mac(psk_, host_nonce_, client_nonce_);
             if (!crypto::constant_time_equal(want.data(), wel.mac, proto::kMacSize)) return;  // impostor
             session_ = wel.session_id;
+            if (wel.host_name[0]) remote_name_ = wel.host_name;
             const auto k = crypto::session_key(psk_, client_nonce_, host_nonce_);
             key_.set_key(k.data(), k.size());
             last_rx_ = now;
@@ -396,13 +420,22 @@ void ClientNet::handle(const uint8_t* buf, size_t len, const NetAddress& from, u
         break;
     }
     case PacketType::Bye: {
+        proto::Bye bye;
+        proto::read(b, bye);
+        const bool replaced = bye.reason == proto::ByeReason::Replaced;
         {
             std::lock_guard<std::mutex> lk(mu_);
             session_ = 0;
             have_challenge_ = false;
             target_changed_ = true;
+            // Taken over by another device: stay off the host instead of
+            // grabbing it back automatically (two clients would ping-pong).
+            if (replaced) want_connect_ = false;
         }
-        set_state(ConnState::Reconnecting, "host closed the session");
+        if (replaced)
+            set_state(ConnState::Replaced, "another device is now connected to the host");
+        else
+            set_state(ConnState::Reconnecting, "host closed the session");
         break;
     }
     default:

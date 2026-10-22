@@ -8,6 +8,7 @@ add_library(hikari_shared STATIC
     common/log.cpp
     common/system.cpp
     common/udp.cpp
+    common/invite.cpp
     common/tailscale.cpp
     protocol/abr.cpp
     protocol/net_protocol.cpp

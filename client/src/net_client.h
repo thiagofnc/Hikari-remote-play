@@ -25,7 +25,7 @@
 
 namespace hikari {
 
-enum class ConnState { Idle, Connecting, Connected, Reconnecting, Rejected, Unreachable };
+enum class ConnState { Idle, Connecting, Connected, Reconnecting, Rejected, Unreachable, Replaced };
 const char* to_string(ConnState s);
 
 struct DiscoveredHost {
@@ -67,10 +67,14 @@ public:
     void stop();
 
     // Connects (and keeps reconnecting) to `host` ("name", "ip", "ip:port").
+    // `fallback` (usually the host's Tailscale IP) is tried whenever `host`
+    // does not resolve or stops answering.
     void connect(const std::string& host, const std::string& pairing_code, proto::Preset preset,
-                 uint32_t max_kbps);
+                 uint32_t max_kbps, const std::string& fallback = "");
     void disconnect();
     ConnState state() const { return state_.load(); }
+    std::string remote_ip();    // address currently used, without port ("" if none)
+    std::string host_name();    // as announced by the host in Welcome
 
     // Thread-safe senders.
     void send_input(proto::Input in);
@@ -111,6 +115,9 @@ private:
     // Connection target + session (guarded by mu_).
     std::mutex mu_;
     std::string host_;
+    std::string fallback_;
+    bool use_fallback_ = false;
+    std::string remote_name_;
     NetAddress addr_;
     crypto::Digest psk_{};
     proto::Preset preset_ = proto::Preset::Balanced;

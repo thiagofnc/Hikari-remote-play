@@ -82,6 +82,7 @@ public:
     bool client_connected() const { return connected_.load(); }
     HostNetStats stats();
     void set_tailscale_address(const std::string& ip);
+    void set_psk(const crypto::Digest& psk);  // new pairing code, effective for the next handshake
 
 private:
     struct Session {

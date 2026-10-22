@@ -23,6 +23,12 @@ HostNet::HostNet() : input_owd_(3'000'000), capture_to_sent_(2'000'000) {}
 
 HostNet::~HostNet() { stop(); }
 
+void HostNet::set_psk(const crypto::Digest& psk)
+{
+    std::lock_guard<std::mutex> lk(mu_);
+    psk_ = psk;
+}
+
 void HostNet::set_tailscale_address(const std::string& ip)
 {
     std::lock_guard<std::mutex> lk(mu_);
@@ -363,7 +369,12 @@ void HostNet::handle_auth(ByteReader& r, const NetAddress& from, uint64_t now)
             return;
         pending_.erase(it);
     }
-    const crypto::Digest want = crypto::auth_mac(psk_, a.client_nonce, a.host_nonce);
+    crypto::Digest psk;
+    {
+        std::lock_guard<std::mutex> lk(mu_);
+        psk = psk_;
+    }
+    const crypto::Digest want = crypto::auth_mac(psk, a.client_nonce, a.host_nonce);
     uint8_t out[512];
     if (!crypto::constant_time_equal(want.data(), a.mac, proto::kMacSize)) {
         HK_LOGW("Rejected client %s: wrong pairing code", from.to_string().c_str());
@@ -374,26 +385,51 @@ void HostNet::handle_auth(ByteReader& r, const NetAddress& from, uint64_t now)
         return;
     }
 
+    proto::Welcome wel;
+    const crypto::Digest wm = crypto::welcome_mac(psk, a.host_nonce, a.client_nonce);
+    std::memcpy(wel.mac, wm.data(), proto::kMacSize);
+    std::snprintf(wel.host_name, sizeof(wel.host_name), "%s", host_name_.c_str());
+
+    if (p.hello.flags & proto::kHelloProbe) {
+        // Pairing check from a client's Settings: prove we know the code, but
+        // leave whoever is playing undisturbed.
+        {
+            std::lock_guard<std::mutex> lk(mu_);
+            wel.config = config_;
+        }
+        ByteWriter w(out, sizeof(out));
+        proto::write_header(w, PacketType::Welcome, 0);
+        proto::write(w, wel);
+        sock_.send_to(from, out, w.size());
+        HK_LOGI("Pairing verified for \"%s\" (%s)", p.hello.client_name, from.to_string().c_str());
+        return;
+    }
+
     auto s = std::make_unique<Session>();
     do {
         s->id = crypto::random_u32();
     } while (s->id == 0);
     s->addr = from;
-    const crypto::Digest key = crypto::session_key(psk_, a.client_nonce, a.host_nonce);
+    const crypto::Digest key = crypto::session_key(psk, a.client_nonce, a.host_nonce);
     s->key.set_key(key.data(), key.size());
     s->name = p.hello.client_name;
     s->last_rx_us = now;
-
-    proto::Welcome wel;
     wel.session_id = s->id;
-    const crypto::Digest wm = crypto::welcome_mac(psk_, a.host_nonce, a.client_nonce);
-    std::memcpy(wel.mac, wm.data(), proto::kMacSize);
-    bool replaced = false;
+
+    std::unique_ptr<Session> previous;
     {
         std::lock_guard<std::mutex> lk(mu_);
         wel.config = config_;
-        replaced = session_ != nullptr;
+        previous = std::move(session_);
         session_ = std::move(s);
+    }
+    if (previous) {
+        // Tell the displaced client why, so it stops instead of fighting back
+        // for the host in a reconnect loop. Sealed with its own session key.
+        ByteWriter bw(out, sizeof(out));
+        proto::write_header(bw, PacketType::Bye, previous->id);
+        proto::write(bw, proto::Bye{proto::ByeReason::Replaced});
+        if (seal(bw, previous->key)) sock_.send_to(previous->addr, out, bw.size());
     }
     ByteWriter w(out, sizeof(out));
     proto::write_header(w, PacketType::Welcome, 0);
@@ -403,7 +439,7 @@ void HostNet::handle_auth(ByteReader& r, const NetAddress& from, uint64_t now)
 
     connected_ = true;
     HK_LOGI("Client \"%s\" connected from %s%s", p.hello.client_name, from.to_string().c_str(),
-            replaced ? " (replacing previous client)" : "");
+            previous ? (" (took over from \"" + previous->name + "\")").c_str() : "");
     if (ev_.connected) ev_.connected(p.hello.client_name, p.hello.preset, p.hello.max_bitrate_kbps);
 }
 

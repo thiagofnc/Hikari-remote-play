@@ -119,6 +119,13 @@ struct Hello {
     uint8_t video_codecs = 1;  // bit0 H264, bit1 HEVC
     uint8_t audio_codecs = 1;  // bit0 PCM, bit1 Opus
     uint16_t display_hz = 60;
+    uint8_t flags = 0;  // HelloFlags (optional trailing byte)
+};
+
+enum HelloFlags : uint8_t {
+    // Only verify the pairing (Settings "Save and connect"): the host answers
+    // the handshake but does not open a session or disturb an active one.
+    kHelloProbe = 1 << 0,
 };
 
 struct Challenge {
@@ -146,13 +153,24 @@ struct StreamConfig {
 };
 
 struct Welcome {
-    uint32_t session_id = 0;
+    uint32_t session_id = 0;  // 0 = probe answer (pairing verified, no session)
     uint8_t mac[kMacSize]{};
     StreamConfig config;
+    char host_name[32]{};     // optional trailing field
 };
 
 struct Reject {
     RejectReason reason = RejectReason::BadAuth;
+};
+
+enum class ByeReason : uint8_t {
+    Closed = 0,    // the other side shut down / left
+    Replaced = 1,  // another client took over the host
+    Timeout = 2,
+};
+
+struct Bye {
+    ByeReason reason = ByeReason::Closed;
 };
 
 // ---- input -----------------------------------------------------------------
@@ -340,6 +358,8 @@ void write(ByteWriter& w, const Welcome& v);
 bool read(ByteReader& r, Welcome& v);
 void write(ByteWriter& w, const Reject& v);
 bool read(ByteReader& r, Reject& v);
+void write(ByteWriter& w, const Bye& v);
+bool read(ByteReader& r, Bye& v);
 void write(ByteWriter& w, const Input& v);
 bool read(ByteReader& r, Input& v);
 void write(ByteWriter& w, const AudioPacket& v);  // header fields only; append payload after

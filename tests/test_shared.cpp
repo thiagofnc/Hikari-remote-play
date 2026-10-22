@@ -4,6 +4,7 @@
 
 #include "hikari/crypto.h"
 #include "hikari/histogram.h"
+#include "hikari/invite.h"
 #include "hikari/net_protocol.h"
 #include "hikari/sync.h"
 #include "hikari/tailscale.h"
@@ -224,6 +225,88 @@ TEST(tailscale_address_and_adapter_validation)
     CHECK(is_tailscale_adapter(L"TAILSCALE", nullptr));
     CHECK(is_tailscale_adapter(L"Ethernet 3", L"Tailscale Tunnel"));
     CHECK(!is_tailscale_adapter(L"Ethernet", L"Network card"));
+}
+
+TEST(invite_roundtrip_and_tolerance)
+{
+    const std::string code = "K7QM-2XPA-9TRB";
+    const std::string inv = make_invite("living-room.tail1234.ts.net", proto::kDefaultPort, "100.101.102.103", code);
+    CHECK(inv == "hikari://living-room.tail1234.ts.net/K7QM-2XPA-9TRB?ip=100.101.102.103");
+    Invite out;
+    CHECK(parse_invite(inv, out));
+    CHECK(out.host == "living-room.tail1234.ts.net");
+    CHECK(out.fallback == "100.101.102.103");
+    CHECK(out.code == "K7QM2XPA9TRB");
+    // Pasted with quotes, whitespace, no scheme, lower case, custom port.
+    CHECK(parse_invite("  \"HIKARI://100.64.0.7:47801/k7qm-2xpa-9trb\"\n", out));
+    CHECK(out.host == "100.64.0.7:47801");
+    CHECK(out.fallback.empty());
+    CHECK(parse_invite("myhost/K7QM2XPA9TRB", out));
+    CHECK(make_invite("100.64.0.7", 47801, "100.64.0.7", code) == "hikari://100.64.0.7:47801/K7QM-2XPA-9TRB");
+    // Garbage and wrong-length codes are rejected.
+    CHECK(!parse_invite("hello world", out));
+    CHECK(!parse_invite("hikari://host/ABC", out));
+    CHECK(!parse_invite("hikari://bad host!/K7QM2XPA9TRB", out));
+}
+
+TEST(tailscale_status_json)
+{
+    const std::string json = R"({
+      "Version": "1.76.1", "BackendState": "Running",
+      "Self": {"HostName": "living-room", "DNSName": "living-room.tail1234.ts.net.", "TailscaleIPs": ["100.64.0.7", "fd7a::7"]},
+      "Peer": {
+        "nodekey:aa": {"HostName": "laptop", "TailscaleIPs": ["100.64.0.9"], "CurAddr": "", "Relay": "nyc", "Online": true},
+        "nodekey:bb": {"HostName": "desk", "TailscaleIPs": ["100.64.0.10"], "CurAddr": "203.0.113.5:41641", "Relay": "ord",
+                       "Tags": null, "RxBytes": 12345, "Escaped": "a\"b\cé"}
+      }
+    })";
+    CHECK(tailscale_dns_name_from_json(json) == "living-room.tail1234.ts.net");
+    const TailscalePath relayed = tailscale_path_from_json(json, "100.64.0.9");
+    CHECK(relayed.known && !relayed.direct && relayed.relay == "nyc");
+    const TailscalePath direct = tailscale_path_from_json(json, "100.64.0.10");
+    CHECK(direct.known && direct.direct && direct.endpoint == "203.0.113.5:41641");
+    CHECK(!tailscale_path_from_json(json, "100.64.0.99").known);
+    CHECK(tailscale_dns_name_from_json("{\"BackendState\":\"Stopped\",\"Self\":{\"DNSName\":\"x.\"}}").empty());
+    CHECK(tailscale_dns_name_from_json("not json").empty());
+    CHECK(!tailscale_path_from_json("{\"Peer\":", "100.64.0.9").known);
+}
+
+TEST(protocol_probe_and_bye_extensions)
+{
+    uint8_t buf[512];
+    // Hello: the probe flag is an optional trailing byte.
+    proto::Hello h;
+    h.flags = proto::kHelloProbe;
+    ByteWriter w(buf, sizeof(buf));
+    proto::write(w, h);
+    ByteReader r(buf, w.size());
+    proto::Hello ho;
+    CHECK(proto::read(r, ho));
+    CHECK(ho.flags == proto::kHelloProbe);
+    ByteWriter w2(buf, sizeof(buf));
+    proto::write(w2, proto::Hello{});
+    ByteReader r2(buf, w2.size());
+    CHECK(proto::read(r2, ho));
+    CHECK(ho.flags == 0);
+    // Bye: empty body (older peers) reads as Closed.
+    proto::Bye b;
+    ByteReader empty(buf, 0);
+    CHECK(proto::read(empty, b));
+    CHECK(b.reason == proto::ByeReason::Closed);
+    ByteWriter w3(buf, sizeof(buf));
+    proto::write(w3, proto::Bye{proto::ByeReason::Replaced});
+    ByteReader r3(buf, w3.size());
+    CHECK(proto::read(r3, b));
+    CHECK(b.reason == proto::ByeReason::Replaced);
+    // Welcome carries the host's name.
+    proto::Welcome wel;
+    std::strcpy(wel.host_name, "Living room");
+    ByteWriter w4(buf, sizeof(buf));
+    proto::write(w4, wel);
+    ByteReader r4(buf, w4.size());
+    proto::Welcome wo;
+    CHECK(proto::read(r4, wo));
+    CHECK(std::strcmp(wo.host_name, "Living room") == 0);
 }
 
 int main(int argc, char** argv) { return hktest::run_all(argc > 1 ? argv[1] : nullptr); }

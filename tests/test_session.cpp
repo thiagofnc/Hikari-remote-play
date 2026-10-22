@@ -3,6 +3,7 @@
 #include <thread>
 
 #include "host_net.h"
+#include "host_probe.h"
 #include "net_client.h"
 #include "hikari/clock.h"
 #include "test_framework.h"
@@ -99,6 +100,62 @@ TEST(loopback_pairing_input_video_and_reconnect)
     CHECK_EQ(lost_report.load(), 0u);
     CHECK_EQ(client.stats().frames_complete, 1u);  // lifetime counters survive reconnects
     client.stop();
+    host.stop();
+}
+
+TEST(loopback_probe_takeover_fallback_and_new_code)
+{
+    const std::string code = crypto::generate_pairing_code();
+    const uint8_t id[8] = {8, 7, 6, 5, 4, 3, 2, 1};
+    std::atomic<int> connects{0};
+    HostNetEvents events;
+    events.connected = [&](const std::string&, proto::Preset, uint32_t) { ++connects; };
+    HostNet host;
+    uint16_t port = 0;
+    for (int attempt = 0; attempt < 20 && !port; ++attempt) {
+        const auto candidate = static_cast<uint16_t>(50000 + crypto::random_u32() % 10000);
+        if (host.start(candidate, crypto::psk_from_code(code), "Loopback", id, events)) port = candidate;
+    }
+    CHECK(port != 0);
+    if (!port) return;
+    const std::string address = "127.0.0.1:" + std::to_string(port);
+
+    ClientNet first;
+    CHECK(first.start({}));
+    first.connect(address, code, proto::Preset::Balanced, 0);
+    CHECK(wait_for([&] { return first.state() == ConnState::Connected; }));
+    CHECK(first.host_name() == "Loopback");
+
+    // A pairing check from Settings must not disturb the session in progress.
+    const ProbeOutcome ok = probe_host({address}, code);
+    CHECK(ok.result == ProbeResult::Ok);
+    CHECK(ok.host_name == "Loopback");
+    CHECK(probe_host({address}, "000000000000").result == ProbeResult::WrongCode);
+    CHECK(probe_host({"no-such-host.invalid"}, code, nullptr, 1500).result == ProbeResult::CannotResolve);
+    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    CHECK(first.state() == ConnState::Connected);
+    CHECK_EQ(connects.load(), 1);
+
+    // An unresolvable primary name falls back to the invite's IP; the new
+    // client takes over and the previous one is told and stays off.
+    ClientNet second;
+    CHECK(second.start({}));
+    second.connect("no-such-host.invalid", code, proto::Preset::Balanced, 0, address);
+    CHECK(wait_for([&] { return second.state() == ConnState::Connected; }));
+    CHECK(wait_for([&] { return first.state() == ConnState::Replaced; }));
+    std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+    CHECK(first.state() == ConnState::Replaced);  // no tug-of-war
+    CHECK(second.state() == ConnState::Connected);
+    CHECK_EQ(connects.load(), 2);
+
+    // A new pairing code applies immediately, without restarting the host.
+    const std::string code2 = crypto::generate_pairing_code();
+    host.set_psk(crypto::psk_from_code(code2));
+    CHECK(probe_host({address}, code).result == ProbeResult::WrongCode);
+    CHECK(probe_host({address}, code2).result == ProbeResult::Ok);
+
+    first.stop();
+    second.stop();
     host.stop();
 }
 
