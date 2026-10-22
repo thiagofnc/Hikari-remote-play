@@ -120,10 +120,12 @@ void ClientApp::preview_state(const std::string& state)
     status_.signal_ok = state != "asleep";
     status_.wake_methods = 3;
     if (state == "waking") {
+        status_.signal_ok = 0;
         status_.console = ConsoleState::Waking;
         status_.phase = SessionPhase::WaitingForVideo;
         std::snprintf(status_.message, sizeof(status_.message), "Waiting for the Switch's picture");
     } else if (state == "failed") {
+        status_.signal_ok = 0;
         status_.console = ConsoleState::AwakeNoVideo;
         status_.phase = SessionPhase::Failed;
         status_.issue = proto::HostIssue::NoSignal;
@@ -156,7 +158,8 @@ int ClientApp::run(Config& cfg, ClientHooks hooks)
     RegisterClassExW(&wc);
 
     const UINT dpi = GetDpiForSystem();
-    const int w = MulDiv(1280, dpi, 96), h = MulDiv(780, dpi, 96);
+    const bool compact_preview = hooks_.preview == "ready-compact";
+    const int w = MulDiv(compact_preview ? 860 : 1280, dpi, 96), h = MulDiv(compact_preview ? 600 : 780, dpi, 96);
     RECT wa;
     SystemParametersInfoW(SPI_GETWORKAREA, 0, &wa, 0);
     hwnd_ = CreateWindowExW(0, wc.lpszClassName, hooks_.preview.empty() ? L"Hikari" : L"Hikari - Offline preview", WS_OVERLAPPEDWINDOW, wa.left + (wa.right - wa.left - w) / 2,
@@ -294,6 +297,7 @@ void ClientApp::do_action(int action)
         net_.stop_stream();
         set_screen(Screen::Lobby);
         break;
+    case kActConnection:
     case kActSettings:
         if (hooks_.open_settings && hooks_.open_settings(hwnd_)) {
             load_settings();
@@ -367,6 +371,21 @@ void ClientApp::on_key(UINT vk, bool down)
 {
     const bool ctrl = GetKeyState(VK_CONTROL) < 0, alt = GetKeyState(VK_MENU) < 0;
     if (down) {
+        if (screen_ == Screen::Lobby && (vk == VK_TAB || vk == VK_SPACE || (vk == VK_RETURN && !alt))) {
+            std::lock_guard<std::mutex> lk(mu_);
+            auto focused = std::find_if(ui_.hits.begin(), ui_.hits.end(),
+                [this](const auto& hit) { return hit.first == ui_.focus_id; });
+            if (vk == VK_TAB && !ui_.hits.empty()) {
+                const int direction = GetKeyState(VK_SHIFT) < 0 ? -1 : 1;
+                const int count = static_cast<int>(ui_.hits.size());
+                const int current = focused == ui_.hits.end() ? (direction > 0 ? -1 : 0)
+                    : static_cast<int>(focused - ui_.hits.begin());
+                ui_.focus_id = ui_.hits[(current + direction + count) % count].first;
+            } else if (focused != ui_.hits.end()) {
+                post_action(focused->first);
+            }
+            return;
+        }
         if (vk == VK_F11 || (vk == VK_RETURN && alt)) {
             toggle_fullscreen();
             return;
@@ -395,10 +414,6 @@ void ClientApp::on_key(UINT vk, bool down)
         }
         if (vk == 'Q' && ctrl && alt) {
             post_action(kActStop);
-            return;
-        }
-        if (screen_ == Screen::Lobby && vk == VK_RETURN) {
-            post_action(kActPlay);
             return;
         }
     }
@@ -450,6 +465,7 @@ LRESULT ClientApp::handle_message(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         std::lock_guard<std::mutex> lk(mu_);
         ui_.mouse_down = true;
         ui_.pressed_id = ui_.hit(static_cast<float>(GET_X_LPARAM(lp)), static_cast<float>(GET_Y_LPARAM(lp)));
+        if (ui_.pressed_id >= 0) ui_.focus_id = ui_.pressed_id;
         SetCapture(hwnd);
         return 0;
     }
@@ -659,90 +675,114 @@ void ClientApp::draw_lobby(ui::Painter& p, const Rect& r)
 {
     std::lock_guard<std::mutex> lk(mu_);
     ui_.begin_frame();
-    const ConnState conn = hooks_.preview.empty() ? net_.state() : ConnState::Connected;
+    const ConnState conn = hooks_.preview.empty() ? net_.state()
+        : hooks_.preview == "connection-needed" ? ConnState::Idle : ConnState::Connected;
     const bool connected = conn == ConnState::Connected;
     const proto::HostStatus st = status_;
     const bool have = have_status_ && connected;
-    const float margin = p.s(40), left = r.l + margin, right = r.r - margin;
     p.background(r);
-    p.logo({left, p.s(24), left + p.s(30), p.s(54)});
-    p.text("Hikari", {left + p.s(40), p.s(24), left + p.s(220), p.s(54)}, p.s(20), ui::rgb(th::kText), Weight::SemiBold);
-    const std::string connection = connected ? "Connected to " + std::string(st.host_name[0] ? st.host_name : host_label_)
-        : conn == ConnState::Rejected ? "Pairing code rejected"
-        : conn == ConnState::Unreachable ? "Host unreachable" : to_string(conn);
-    p.pill(right, p.s(26), connection, connected ? th::kGood : th::kWarn, true);
-    p.line(left, p.s(80), right, p.s(80), ui::rgb(th::kBorder), p.s(1));
+    const float m = p.s(24), right = r.r-m;
+    p.text("Remote play", {m,p.s(18),right,p.s(50)},p.s(22),ui::rgb(th::kText),Weight::SemiBold);
+    p.text("Your console, connection and stream preferences.", {m,p.s(52),right,p.s(76)},p.s(13),ui::rgb(th::kText2));
+    if(p.button(ui_,kActController,{right-p.s(236),p.s(24),right-p.s(124),p.s(60)},"Controller")) post_action(kActController);
+    if(p.button(ui_,kActConnection,{right-p.s(112),p.s(24),right,p.s(60)},"Connection")) post_action(kActSettings);
 
-    const float content_top = std::max(p.s(134), r.h() * 0.23f);
-    const float content_right = r.cx() - p.s(8);
-    const float art_w = std::min(p.s(380), r.w() * 0.34f);
-    const float art_x = r.l + r.w() * 0.75f;
-    const bool awake = have && st.console == ConsoleState::Ready;
-    p.console({art_x-art_w/2, content_top+p.s(10), art_x+art_w/2, content_top+art_w*0.70f},
-              awake ? th::kGood : th::kWarn, awake);
-    p.text(have ? std::string(st.host_name) + "'s Switch" : "Your Switch",
-           {left,content_top,content_right,content_top+p.s(48)},p.s(30),ui::rgb(th::kText),Weight::SemiBold);
-    std::string state = "Waiting for the host";
-    if (have) {
-        switch (st.console) {
-        case ConsoleState::Ready: state="Ready to play"; break;
-        case ConsoleState::Asleep: state="Asleep. Play will wake your console."; break;
-        case ConsoleState::Off: state="Off or undocked"; break;
-        case ConsoleState::Waking: state="Waking your console"; break;
-        case ConsoleState::AwakeNoVideo: state="Waiting for an HDMI signal"; break;
-        default: state="Checking your console"; break;
-        }
+    const float split = m+(r.w()-m*3)*0.62f, side=split+p.s(16);
+    const float top=p.s(100), bottom=r.b-p.s(52), session_bottom=top+p.s(220);
+    p.fill({m,top,split,session_bottom},ui::rgb(th::kBg2),p.s(12));
+    p.fill({m,session_bottom+p.s(16),split,bottom},ui::rgb(th::kBg2),p.s(12));
+    p.fill({side,top,right,bottom},ui::rgb(th::kBg2),p.s(12));
+    const float x=m+p.s(22), inner=split-p.s(22), sx=side+p.s(22), sr=right-p.s(22);
+    const bool awake=have && st.console==ConsoleState::Ready;
+    const std::string host=have && st.host_name[0] ? st.host_name : host_label_;
+    p.text(host.empty()?"Your Switch":host+"'s Switch",{x,top+p.s(18),inner-p.s(150),top+p.s(48)},p.s(18),ui::rgb(th::kText),Weight::SemiBold);
+    std::string state="Waiting for the host";
+    if(have) switch(st.console) {
+    case ConsoleState::Ready: state="Ready to play"; break;
+    case ConsoleState::Asleep: state="Asleep. Play will wake your console."; break;
+    case ConsoleState::Off: state="Off or undocked"; break;
+    case ConsoleState::Waking: state="Waking your console"; break;
+    case ConsoleState::AwakeNoVideo: state="Waiting for an HDMI signal"; break;
+    default: state="Checking your console"; break;
     }
-    p.text(state,{left,content_top+p.s(58),content_right,content_top+p.s(88)},p.s(16),ui::rgb(th::kText2));
-    if (!hooks_.preview.empty())
-        p.text("Offline preview. Device status is sample data.", {left,content_top+p.s(98),content_right,content_top+p.s(122)},p.s(12),ui::rgb(th::kText3));
-    float y=content_top+p.s(154);
+    p.text(state,{x,top+p.s(52),inner-p.s(146),top+p.s(78)},p.s(13),ui::rgb(th::kText2));
+    p.console({inner-p.s(138),top+p.s(18),inner,top+p.s(116)},awake?th::kGood:th::kWarn,awake);
     const bool progress=have && st.phase!=SessionPhase::Lobby && st.phase!=SessionPhase::Failed;
-    if (progress) {
-        const int current = st.phase==SessionPhase::Waking ? 0 : st.phase==SessionPhase::WaitingForVideo ? 1
-            : st.phase==SessionPhase::WaitingForController ? 2 : 3;
+    float y=top+p.s(100);
+    if(progress) {
+        const int current=st.phase==SessionPhase::Waking?0:st.phase==SessionPhase::WaitingForVideo?1:st.phase==SessionPhase::WaitingForController?2:3;
         const char* steps[]={"Wake","Picture","Controller","Stream"};
-        const float step=(content_right-left)/4;
+        const float step=(inner-x)/4;
         for(int i=0;i<4;++i) {
-            const float x=left+step*i+p.s(10);
-            if(i<3) p.line(x+p.s(14),y+p.s(10),x+step-p.s(14),y+p.s(10),ui::rgb(i<current?th::kAccent:th::kBorder),p.s(1));
-            if(i==current) p.spinner(x,y+p.s(10),p.s(8),ui::rgb(th::kAccent));
-            else p.circle(x,y+p.s(10),p.s(5),ui::rgb(i<current?th::kAccent:th::kBorder));
-            p.text(steps[i],{x-p.s(9),y+p.s(28),x+step-p.s(10),y+p.s(50)},p.s(12),ui::rgb(i<=current?th::kText:th::kText3));
+            const float cx=x+step*i+p.s(8);
+            if(i<3) p.line(cx+p.s(12),y+p.s(8),cx+step-p.s(12),y+p.s(8),ui::rgb(i<current?th::kAccent:th::kBorder),p.s(1));
+            if(i==current) p.spinner(cx,y+p.s(8),p.s(7),ui::rgb(th::kAccent));
+            else p.circle(cx,y+p.s(8),p.s(4),ui::rgb(i<current?th::kAccent:th::kBorder));
+            p.text(steps[i],{cx-p.s(8),y+p.s(21),cx+step-p.s(10),y+p.s(43)},p.s(12),ui::rgb(i<=current?th::kText:th::kText3));
         }
-        p.text(st.message[0]?st.message:proto::to_string(st.phase),{left,y+p.s(64),content_right,y+p.s(110)},p.s(13),ui::rgb(th::kText2),Weight::Regular,Align::Leading,Align::Center,true);
-        if(p.button(ui_,kActStop,{left,y+p.s(124),left+p.s(112),y+p.s(162)},"Cancel")) post_action(kActStop);
+        p.text(st.message[0]?st.message:proto::to_string(st.phase),{x,y+p.s(46),inner-p.s(100),y+p.s(94)},p.s(12),ui::rgb(th::kText2),Weight::Regular,Align::Leading,Align::Center,true);
+        if(p.button(ui_,kActStop,{inner-p.s(88),y+p.s(60),inner,y+p.s(96)},"Cancel")) post_action(kActStop);
     } else {
-        if(have && st.phase==SessionPhase::Failed) {
-            p.text(st.message[0]?st.message:"Could not start",{left,y-p.s(10),content_right,y+p.s(52)},p.s(14),ui::rgb(th::kBad),Weight::Regular,Align::Leading,Align::Center,true);
-            y+=p.s(68);
-        }
+        const bool failed=have && st.phase==SessionPhase::Failed;
         const bool setup=conn==ConnState::Rejected || conn==ConnState::Idle;
-        const int action=setup?kActSettings:(have && st.phase==SessionPhase::Failed?kActRetry:kActPlay);
-        ui_.focus_id = action;
-        if(p.button(ui_,action,{left,y,left+p.s(180),y+p.s(44)},setup?"Connection settings":action==kActRetry?"Try again":"Play",ButtonStyle::Primary,setup||have)) post_action(action);
-        p.text(setup?"Enter your host address and pairing code.":have?"Or press A on your controller.":"Keep the host app running on your other PC.",
-               {left,y+p.s(56),content_right,y+p.s(92)},p.s(13),ui::rgb(th::kText3),Weight::Regular,Align::Leading,Align::Center,true);
-        if (have && st.phase != SessionPhase::Failed && st.issue != proto::HostIssue::None)
-            p.text(proto::to_string(st.issue), {left,y+p.s(100),content_right,y+p.s(124)},
-                   p.s(13),ui::rgb(th::kWarn),Weight::Medium);
+        const int action=setup?kActSettings:failed?kActRetry:kActPlay;
+        if (ui_.focus_id < 0) ui_.focus_id=action;
+        if(failed) {
+            p.text(st.message[0]?st.message:"Could not start the session",{x,y-p.s(12),inner,y+p.s(34)},p.s(13),ui::rgb(th::kBad),Weight::Regular,Align::Leading,Align::Center,true);
+            y+=p.s(40);
+        }
+        if(p.button(ui_,action,{x,y,x+p.s(164),y+p.s(38)},setup?"Set up connection":failed?"Try again":"Play",ButtonStyle::Primary,setup||have)) post_action(action);
+        p.text(setup?"Enter your host address and pairing code.":failed?"Check the host, then retry.":have?"Or press A on your controller.":"Keep the host app running on your other PC.",
+               {x,y+p.s(46),inner,y+p.s(70)},p.s(12),ui::rgb(th::kText3));
+        if(have && !failed && st.issue!=proto::HostIssue::None)
+            p.text(proto::to_string(st.issue),{x,y+p.s(74),inner,y+p.s(98)},p.s(12),ui::rgb(th::kWarn));
     }
-    const float footer=r.b-p.s(108);
-    p.line(left,footer,right,footer,ui::rgb(th::kBorder),p.s(1));
-    p.text("Stream preset",{left,footer+p.s(16),left+p.s(120),footer+p.s(40)},p.s(12),ui::rgb(th::kText2));
-    const char* presets[]={"Minimum latency","Balanced","Quality"};
-    const float sw=p.s(140), sy=footer+p.s(46);
+    const float prefs=session_bottom+p.s(16), row_start=prefs+p.s(60);
+    p.text("Stream preference",{x,prefs+p.s(16),inner,prefs+p.s(42)},p.s(15),ui::rgb(th::kText),Weight::SemiBold);
+    const char* names[]={"Minimum latency","Balanced","Quality"};
+    const char* descriptions[]={"Prioritize response time.","Balance responsiveness and picture quality.","Prioritize picture quality."};
+    const float pitch=std::min(p.s(64),(bottom-row_start-p.s(16))/3);
     for(int i=0;i<3;++i) {
-        const Rect button{left+sw*i,sy,left+sw*(i+1)-p.s(4),sy+p.s(34)};
+        const Rect row{x-p.s(6),row_start+pitch*i,inner+p.s(6),row_start+pitch*(i+1)-p.s(4)};
         const bool selected=static_cast<int>(preset_.load())==i;
-        if(p.button(ui_,kActPresetLatency+i,button,presets[i],selected?ButtonStyle::Secondary:ButtonStyle::Ghost)) post_action(kActPresetLatency+i);
-        if(selected) p.line(button.l+p.s(12),button.b,button.r-p.s(12),button.b,ui::rgb(th::kAccent),p.s(2));
+        if(p.button(ui_,kActPresetLatency+i,row,"",selected?ButtonStyle::Secondary:ButtonStyle::Ghost)) post_action(kActPresetLatency+i);
+        const float cx=x+p.s(12),cy=row.cy();
+        p.circle(cx,cy,p.s(7),ui::rgb(selected?th::kAccent:th::kText3),false,p.s(1));
+        if(selected) p.circle(cx,cy,p.s(3),ui::rgb(th::kAccent));
+        if(pitch<p.s(48)) {
+            p.text(names[i],{x+p.s(32),row.t,inner,row.b},p.s(13),ui::rgb(th::kText),Weight::Medium);
+        } else {
+            p.text(names[i],{x+p.s(32),row.t+p.s(4),inner,row.cy()+p.s(2)},p.s(13),ui::rgb(th::kText),Weight::Medium);
+            p.text(descriptions[i],{x+p.s(32),row.cy(),inner,row.b-p.s(3)},p.s(12),ui::rgb(th::kText2));
+        }
     }
-    if(p.button(ui_,kActController,{right-p.s(220),sy,right-p.s(110),sy+p.s(34)},"Controller",ButtonStyle::Ghost)) post_action(kActController);
-    if(p.button(ui_,kActSettings,{right-p.s(100),sy,right,sy+p.s(34)},"Settings",ButtonStyle::Ghost)) post_action(kActSettings);
-    // Keep the hardware power action available when the host advertises it.
-    if(have && (st.wake_methods&4) && awake)
-        if(p.button(ui_,kActSleep,{right-p.s(220),footer+p.s(10),right-p.s(110),footer+p.s(40)},"Sleep",ButtonStyle::Ghost)) post_action(kActSleep);
+    p.text("Host connection",{sx,top+p.s(18),sr,top+p.s(44)},p.s(15),ui::rgb(th::kText),Weight::SemiBold);
+    p.pill(sx,top+p.s(56),connected?"Connected":to_string(conn),connected?th::kGood:th::kWarn);
+    p.text(host.empty()?"No host configured":host,{sx,top+p.s(96),sr,top+p.s(120)},p.s(13),ui::rgb(th::kText));
+    p.line(sx,top+p.s(140),sr,top+p.s(140),ui::rgb(th::kBorder),p.s(1));
+    const char* labels[]={"Controller bridge","Capture card","HDMI signal","Hardware encoder"};
+    const bool checks[]={bool(st.bridge_ok),bool(st.capture_ok),bool(st.signal_ok),bool(st.encoder_ok)};
+    const bool can_sleep=have && (st.wake_methods&4) && awake;
+    const float check_pitch=can_sleep?std::clamp((bottom-top-p.s(276))/3,p.s(40),p.s(62)):p.s(62);
+    for(int i=0;i<4;++i) {
+        const float ry=top+p.s(158)+check_pitch*i;
+        p.text(labels[i],{sx,ry,sr,ry+p.s(22)},p.s(13),ui::rgb(th::kText));
+        p.circle(sx+p.s(4),ry+p.s(35),p.s(3),ui::rgb(!have?th::kText3:checks[i]?th::kGood:th::kWarn));
+        p.text(!have?"Waiting for host":checks[i]?"Ready":"Not ready",{sx+p.s(15),ry+p.s(24),sr,ry+p.s(46)},p.s(12),ui::rgb(th::kText2));
+    }
+    if(can_sleep)
+        if(p.button(ui_,kActSleep,{sx,bottom-p.s(54),sr,bottom-p.s(18)},"Put console to sleep")) post_action(kActSleep);
+    p.logo({m,r.b-p.s(34),m+p.s(18),r.b-p.s(16)});
+    p.text(!hooks_.preview.empty()?"Offline preview - Sample device status":"Hikari",{m+p.s(26),r.b-p.s(38),right,r.b-p.s(12)},p.s(12),ui::rgb(th::kText3));
+    // State changes can replace Play with Retry, Settings or Cancel.
+    if (std::none_of(ui_.hits.begin(), ui_.hits.end(),
+            [this](const auto& hit) { return hit.first == ui_.focus_id; })) {
+        const int preferred = progress ? kActStop : conn == ConnState::Rejected || conn == ConnState::Idle
+            ? kActSettings : have && st.phase == SessionPhase::Failed ? kActRetry : kActPlay;
+        const auto next = std::find_if(ui_.hits.begin(), ui_.hits.end(),
+            [preferred](const auto& hit) { return hit.first == preferred; });
+        ui_.focus_id = next != ui_.hits.end() ? preferred : ui_.hits.empty() ? -1 : ui_.hits.front().first;
+    }
     ui_.take_click();
 }
 

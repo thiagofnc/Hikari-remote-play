@@ -194,10 +194,10 @@ float Painter::text_width(const std::string& s, float size, Weight w)
 
 bool Painter::button(Interaction& ui, int id, const Rect& r, const std::string& label, ButtonStyle style, bool enabled)
 {
-    ui.hits.push_back({id, r});
+    if (enabled) ui.hits.push_back({id, r});
     const bool hover = enabled && ui.hovered(id, r);
     const bool down = hover && ui.mouse_down && ui.pressed_id == id;
-    const bool focus = ui.focus_id == id;
+    const bool focus = enabled && ui.focus_id == id;
     const float rad = s(6);
     D2D1_COLOR_F bg, fg, border{0, 0, 0, 0};
     switch (style) {
@@ -235,7 +235,7 @@ bool Painter::button(Interaction& ui, int id, const Rect& r, const std::string& 
 float Painter::pill(float x, float y, const std::string& label, uint32_t dot, bool right_align)
 {
     const float size = s(12.5f);
-    const float w = text_width(label, size, Weight::Medium) + s(30);
+    const float w = text_width(label, size, Weight::Medium) + s(36);
     const float h = s(26);
     const float l = right_align ? x - w : x;
     Rect r{l, y, l + w, y + h};

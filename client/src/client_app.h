@@ -52,6 +52,7 @@ private:
         kActPresetQuality,
         kActRetry,
         kActFullscreen,
+        kActConnection,
     };
 
     void load_settings();
