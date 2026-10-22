@@ -108,7 +108,7 @@ The supplied Hikari logo and original transparent Joy-Con image carry the produc
 - Original supplied artwork with preserved transparent pixels.
 - Motion attached to progress, capture, input feedback and transient status.
 
-Evidence: `ui/hikari/ui_kit.h`, `ui/ui_kit.cpp`, `client/src/controller_settings.cpp`, `client/src/joycon_art.cpp`, `client/src/client_app.cpp`, `app/main.cpp`; rendered review captures in `artifacts/ui-review/after` (01?06 and 08 for refreshed menus, 13 for compact lobby, 09 for the unchanged controller reference). Frontmatter `px` values represent logical Windows DIPs at 96 DPI, not physical pixels or a CSS implementation. DirectWrite keeps its native line metrics; no fixed line-height or letter-spacing scale is established.
+Evidence: `ui/hikari/ui_kit.h`, `ui/ui_kit.cpp`, `client/src/controller_settings.cpp`, `client/src/joycon_art.cpp`, `client/src/client_app.cpp`, `app/main.cpp`; console extension reviewed against `artifacts/ui-review/console/{switch,switch2,compact,failed,waking}.png`; earlier menu review captures in `artifacts/ui-review/after` (01?06 and 08 for refreshed menus, 13 for compact lobby, 09 for the unchanged controller reference). Frontmatter `px` values represent logical Windows DIPs at 96 DPI, not physical pixels or a CSS implementation. DirectWrite keeps its native line metrics; no fixed line-height or letter-spacing scale is established.
 
 ## Colors
 
@@ -158,6 +158,8 @@ Setup, connection and host client sizes are 680 by 454, 760 by 568 and 900 by 72
 
 The lobby applies the same 24 DIP margin and page hierarchy. Real Controller and Connection actions sit at the upper right with 36 DIP height. Session state and stream preference occupy the left column; host connection and readiness checks occupy the right. Content starts at 100 DIP with a 16 DIP pane gap. The session pane is 220 DIP tall; Play is 164 by 38 DIP. The left/right division uses 62% of the usable width for the left workspace. Stream preference is a vertical radio-choice list with row pitch up to 64 DIP; below 48 DIP pitch, labels collapse to one line and descriptions are omitted. The footer identifies offline sample data. This compact behavior is measured inside the native window, not a web breakpoint.
 
+The session illustration reserves 44% of its inner row width, clamped to 174-300 DIP, at the right of the session pane. Text and status messages end 20 DIP before the artwork; controls remain in the left action area. Progress shows only the current step and spinner when the text area is narrower than 330 DIP, retaining its message and Cancel action. Larger illustrations use the same existing pane rather than changing the workspace hierarchy.
+
 Controller settings default to 1200 by 760 DIP, with a minimum of 1040 by 700 DIP. Its margin is 24 DIP, toolbar controls are 36 DIP tall, and the content begins at 148 DIP. The binding pane width is clamped to 57% of the window between 600 and 800 DIP; a 16 DIP gap separates the artwork pane. The three mapping columns have 22 DIP gaps, adaptive row pitch clamped to 24–40 DIP and targets up to 32 DIP tall. The footer stays anchored with 38 DIP action buttons. These are native minimum-size constraints, not responsive stacking instructions.
 
 **The Shared Rhythm Rule.** Align controls to their toolbar, pane and footer baselines; expand the working area without adding decorative dashboard modules.
@@ -193,6 +195,14 @@ Gamepad/Keyboard are functional segmented tabs: selected gray fill, semibold tex
 ### Status Badges
 
 Shared status badges are 26 DIP tall, their width is measured text plus 36 DIP, with a colored dot and text; controller status badges use a 28 DIP allocation and subtle semantic tint. Text explains the state so color is supplementary.
+
+### Lobby Console Illustration
+
+The native painter provides Switch and Switch 2 front elevations in a shared 100 by 64 coordinate space, fitted uniformly and centered within its bounds. The dock occupies `(14,32)-(86,63)`, inside the controller rails, leaving side controls visible. Left and right stick centers are `(6.8,13)` and `(93.2,28.5)`; directional and face-button diamonds are centered at `(6.8,27)` and `(93.2,14.5)`. The supplied Hikari mark occupies `(37,5)-(63,31)`, a 26-unit square entirely above the dock lip, only when the screen is on. A screen-off console has a blank dark screen. Its status LED is a small flat dot without a halo.
+
+Switch uses cyan and coral grips. Switch 2 uses black graphite grips with cyan and coral stick rings, a rounder dock and the lower C button. These are local illustration materials, not new global UI tokens. They are separate from the user-supplied interactive Joy-Con atlas, which remains unchanged.
+
+`--preview=switch2` exposes the Switch 2 illustration in an explicitly offline, screen-off sample state. Live rendering currently falls back to Switch: the generic controller bridge reports USB readiness, not reliable console identity. There is no model selector or automatic console-model detection in this implementation. Future connected-model selection requires a reliable model signal; neither these drawings nor their preview imply that capability exists.
 
 ### Binding Targets and Controller Artwork
 
