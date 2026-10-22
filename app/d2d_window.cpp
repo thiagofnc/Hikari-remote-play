@@ -37,7 +37,7 @@ bool D2DWindow::create(const wchar_t* title, int w_dip, int h_dip, HWND owner, b
     start_ = now_us();
     painter_.init();
     D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, factory_.GetAddressOf());
-    edit_brush_ = CreateSolidBrush(RGB(0x28, 0x2A, 0x2F));
+    edit_brush_ = CreateSolidBrush(RGB(0x1E, 0x1F, 0x23));  // ui::theme::kSurface
 
     const UINT dpi = owner ? GetDpiForWindow(owner) : GetDpiForSystem();
     scale_ = dpi / 96.0f;
@@ -51,11 +51,7 @@ bool D2DWindow::create(const wchar_t* title, int w_dip, int h_dip, HWND owner, b
     hwnd_ = CreateWindowExW(0, L"HikariWindow", title, style, wa.left + (wa.right - wa.left - w) / 2,
                             wa.top + (wa.bottom - wa.top - h) / 2, w, h, owner, nullptr, inst, this);
     if (!hwnd_) return false;
-    const BOOL dark = TRUE;
-    using SetAttr = HRESULT(WINAPI*)(HWND, DWORD, LPCVOID, DWORD);
-    if (auto f = reinterpret_cast<SetAttr>(reinterpret_cast<void*>(
-            GetProcAddress(LoadLibraryW(L"dwmapi.dll"), "DwmSetWindowAttribute"))))
-        f(hwnd_, 20, &dark, sizeof(dark));
+    ui::style_window(hwnd_);
     make_font();
     SetTimer(hwnd_, kTimer, 33, nullptr);
     return true;
@@ -64,7 +60,7 @@ bool D2DWindow::create(const wchar_t* title, int w_dip, int h_dip, HWND owner, b
 void D2DWindow::make_font()
 {
     if (font_) DeleteObject(font_);
-    font_ = CreateFontW(-static_cast<int>(15 * scale_), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
+    font_ = CreateFontW(-static_cast<int>(14 * scale_), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
                         OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe UI");
     for (HWND e : edits_) SendMessageW(e, WM_SETFONT, reinterpret_cast<WPARAM>(font_), TRUE);
 }
@@ -225,8 +221,8 @@ LRESULT D2DWindow::handle(UINT msg, WPARAM wp, LPARAM lp)
         return 0;
     case WM_CTLCOLOREDIT: {
         HDC dc = reinterpret_cast<HDC>(wp);
-        SetTextColor(dc, RGB(0xEC, 0xED, 0xEF));
-        SetBkColor(dc, RGB(0x28, 0x2A, 0x2F));
+        SetTextColor(dc, RGB(0xF3, 0xF4, 0xF6));
+        SetBkColor(dc, RGB(0x1E, 0x1F, 0x23));
         return reinterpret_cast<LRESULT>(edit_brush_);
     }
     case WM_CLOSE:

@@ -23,10 +23,44 @@ namespace th = ui::theme;
 void menu_header(ui::Painter& p, const Rect& r, const std::string& title, const std::string& subtitle)
 {
     const float x=p.s(28), right=r.r-x;
-    p.logo({x,p.s(28),x+p.s(24),p.s(52)});
-    p.text(title,{x+p.s(38),p.s(22),right,p.s(54)},p.s(22),ui::rgb(th::kText),ui::Weight::SemiBold);
-    p.text(subtitle,{x+p.s(38),p.s(56),right,p.s(80)},p.s(13),ui::rgb(th::kText2));
-    p.line(x,p.s(100),right,p.s(100),ui::rgb(th::kBorder,0.5f),p.s(1));
+    p.logo({x,p.s(30),x+p.s(28),p.s(58)});
+    p.text(title,{x+p.s(42),p.s(24),right,p.s(54)},p.s(22),ui::rgb(th::kText),ui::Weight::SemiBold);
+    p.text(subtitle,{x+p.s(42),p.s(54),right,p.s(76)},p.s(13),ui::rgb(th::kText2));
+}
+
+// Small line icons drawn into a 44 DIP icon tile.
+void role_icon(ui::Painter& p, const Rect& tile, bool host, D2D1_COLOR_F c)
+{
+    const float w=p.s(1.5f);
+    if (host) {
+        // Stacked server units.
+        const float ix=tile.cx()-p.s(11), iy=tile.cy()-p.s(10);
+        for (int unit=0;unit<2;++unit) {
+            const float sy=iy+p.s(11*float(unit));
+            p.stroke({ix,sy,ix+p.s(22),sy+p.s(9)},c,w,p.s(2));
+            p.circle(ix+p.s(4.5f),sy+p.s(4.5f),p.s(1.2f),c);
+            p.line(ix+p.s(10),sy+p.s(4.5f),ix+p.s(17),sy+p.s(4.5f),c,w);
+        }
+    } else {
+        // A display on its stand.
+        const float ix=tile.cx()-p.s(11), iy=tile.cy()-p.s(10);
+        p.stroke({ix,iy,ix+p.s(22),iy+p.s(15)},c,w,p.s(2));
+        p.line(ix+p.s(11),iy+p.s(15),ix+p.s(11),iy+p.s(20),c,w);
+        p.line(ix+p.s(6),iy+p.s(20.5f),ix+p.s(16),iy+p.s(20.5f),c,w);
+    }
+}
+
+void network_icon(ui::Painter& p, const Rect& tile, D2D1_COLOR_F c)
+{
+    const float cx=tile.cx(), cy=tile.cy(), w=p.s(1.5f);
+    const D2D1_POINT_2F a{cx,cy-p.s(7)}, b{cx-p.s(8),cy+p.s(6)}, d{cx+p.s(8),cy+p.s(6)};
+    p.line(a.x,a.y,b.x,b.y,c,w);
+    p.line(a.x,a.y,d.x,d.y,c,w);
+    p.line(b.x,b.y,d.x,d.y,c,w);
+    for (const auto& n : {a,b,d}) {
+        p.circle(n.x,n.y,p.s(3.2f),ui::rgb(0x202226));
+        p.circle(n.x,n.y,p.s(3.2f),c,false,w);
+    }
 }
 
 class RoleWindow final : public D2DWindow {
@@ -36,37 +70,27 @@ private:
     void draw(ui::Painter& p, const Rect& r) override
     {
         p.background(r);
-        const float x=p.s(28), right=r.r-x;
+        const float x=p.s(28), right=r.r-x, pitch=p.s(92);
         menu_header(p,r,"How will you use this PC?","Choose a role for this computer. You can change it later.");
-        const auto choice=[&](int id,float y,const char* title,const char* description) {
-            const Rect row{x,y,right,y+p.s(108)};
-            p.button(ui_,id,row,"",ui::ButtonStyle::Ghost);
-            p.line(x,row.b,right,row.b,ui::rgb(th::kBorder,0.5f),p.s(1));
-            const float ix=x+p.s(16), iy=y+p.s(36);
-            if (id == 1) {
-                // Host: stacked server units. Client: a display and stand.
-                for (int unit=0;unit<2;++unit) {
-                    const float sy=iy+p.s(16*float(unit));
-                    p.stroke({ix,sy,ix+p.s(28),sy+p.s(12)},ui::rgb(th::kText2),p.s(1.5f),p.s(2));
-                    p.circle(ix+p.s(5),sy+p.s(6),p.s(1.5f),ui::rgb(th::kText2));
-                    p.line(ix+p.s(12),sy+p.s(6),ix+p.s(22),sy+p.s(6),ui::rgb(th::kText2),p.s(1.5f));
-                }
-            } else {
-                p.stroke({ix,iy,ix+p.s(28),iy+p.s(20)},ui::rgb(th::kText2),p.s(1.5f),p.s(2));
-                p.line(ix+p.s(14),iy+p.s(20),ix+p.s(14),iy+p.s(27),ui::rgb(th::kText2),p.s(1.5f));
-                p.line(ix+p.s(7),iy+p.s(27),ix+p.s(21),iy+p.s(27),ui::rgb(th::kText2),p.s(1.5f));
-            }
-            p.text(title,{x+p.s(68),y+p.s(22),right-p.s(48),y+p.s(50)},p.s(17),ui::rgb(th::kText),ui::Weight::SemiBold);
-            p.text(description,{x+p.s(68),y+p.s(54),right-p.s(48),y+p.s(82)},p.s(13),ui::rgb(th::kText2));
-            const float ax=right-p.s(20), ay=row.cy();
-            p.line(ax-p.s(12),ay,ax,ay,ui::rgb(th::kText2),p.s(1.5f));
-            p.line(ax-p.s(5),ay-p.s(5),ax,ay,ui::rgb(th::kText2),p.s(1.5f));
-            p.line(ax-p.s(5),ay+p.s(5),ax,ay,ui::rgb(th::kText2),p.s(1.5f));
+        const Rect group{x,p.s(108),right,p.s(108)+pitch*2};
+        p.card(group);
+        p.divider(group.l+p.s(1),group.r-p.s(1),group.t+pitch);
+        const auto choice=[&](int id,float y,bool host,const char* title,const char* description) {
+            const Rect row{group.l,y,group.r,y+pitch};
+            p.button(ui_,id,row.inset(p.s(6)),"",ui::ButtonStyle::Ghost);
+            const bool hover=ui_.hovered(id,row.inset(p.s(6)));
+            const Rect tile{row.l+p.s(20),row.cy()-p.s(22),row.l+p.s(64),row.cy()+p.s(22)};
+            p.icon_tile(tile);
+            role_icon(p,tile,host,ui::rgb(hover?th::kAccent:th::kText));
+            p.text(title,{row.l+p.s(82),row.cy()-p.s(22),row.r-p.s(56),row.cy()-p.s(1)},p.s(15),ui::rgb(th::kText),ui::Weight::SemiBold);
+            p.text(description,{row.l+p.s(82),row.cy()+p.s(1),row.r-p.s(56),row.cy()+p.s(22)},p.s(13),ui::rgb(th::kText2));
+            p.chevron_right(row.r-p.s(28),row.cy(),ui::rgb(hover?th::kText:th::kText3));
         };
-        choice(1,p.s(124),"Host","Your Switch and capture hardware connect to this PC.");
-        choice(2,p.s(244),"Client","Connect to your host PC to play remotely.");
-        p.text("Saved on this PC. Switch anytime with Change role.",{x,p.s(396),right,p.s(430)},p.s(12),ui::rgb(th::kText3));
-
+        choice(1,group.t,true,"Host","Your Switch and capture hardware connect to this PC.");
+        choice(2,group.t+pitch,false,"Client","Connect to your host PC to play remotely.");
+        const Rect footer{r.l,r.b-p.s(56),r.r,r.b};
+        p.footer_bar(footer);
+        p.text("Saved on this PC. Switch anytime with Change role.",{x,footer.t,right,footer.b},p.s(12),ui::rgb(th::kText3));
     }
     void on_action(int id) override { role = id == 1 ? "host" : "client"; close(); }
     void on_key(UINT key) override { if (key == VK_ESCAPE) close(); }
@@ -77,7 +101,7 @@ public:
     explicit ClientSettings(Config& cfg) : cfg_(cfg) {}
     bool open(HWND owner, bool live = true)
     {
-        if (!create(L"Hikari - Connect to your host", 600, 568, owner)) return false;
+        if (!create(L"Hikari - Connect to your host", 600, 540, owner)) return false;
         host_ = add_edit(cfg_.get("client", "host"));
         code_ = add_edit(cfg_.get("client", "pairing_code"), true, true);
         offline_ = !live;
@@ -92,30 +116,36 @@ private:
             next_tailscale_check_ = GetTickCount64() + 2000;
         }
         p.background(r);
-        const float x=p.s(28),right=r.r-x,in=x,edge=right;
+        const float x=p.s(28),right=r.r-x;
         menu_header(p,r,"Connect to your host","Enter the address and pairing code shown on your host PC.");
-        p.text("Host details",{in,p.s(122),edge,p.s(150)},p.s(15),ui::rgb(th::kText),ui::Weight::SemiBold);
-        p.text("Host address",{in,p.s(164),edge,p.s(188)},p.s(13),ui::rgb(th::kText));
-        const Rect host_rect{in,p.s(194),edge,p.s(234)};
-        p.fill(host_rect,ui::rgb(th::kSurface),p.s(6));
-        p.stroke(host_rect,ui::rgb(GetFocus()==host_?th::kAccent:th::kBorder),p.s(1),p.s(6));
-        place(host_,host_rect);
-        p.text("Use the host's Tailscale address for remote play.",{in,p.s(242),edge,p.s(268)},p.s(12),ui::rgb(th::kText3));
-        p.text("Pairing code",{in,p.s(284),edge,p.s(308)},p.s(13),ui::rgb(th::kText));
-        const Rect code_rect{in,p.s(314),edge,p.s(354)};
-        p.fill(code_rect,ui::rgb(th::kSurface),p.s(6));
-        p.stroke(code_rect,ui::rgb(GetFocus()==code_?th::kAccent:th::kBorder),p.s(1),p.s(6));
-        place(code_,code_rect);
-        p.text("The 12-character code displayed on your host.",{in,p.s(362),edge,p.s(388)},p.s(12),ui::rgb(th::kText3));
-        p.button(ui_,3,{in,p.s(404),in+p.s(148),p.s(440)},tailscale_.installed?"Open Tailscale":"Install Tailscale");
-        p.text(offline_?"Offline preview":tailscale_.ipv4.empty()?"Sign in on both PCs with the same account.":"This PC: "+tailscale_.ipv4,
-               {in+p.s(164),p.s(398),edge,p.s(446)},p.s(12),ui::rgb(th::kText2),ui::Weight::Regular,ui::Align::Leading,ui::Align::Center,true);
-        p.text(error_,{x,p.s(452),right,p.s(484)},p.s(12),ui::rgb(th::kBad),ui::Weight::Regular,ui::Align::Leading,ui::Align::Center,true);
-        p.line(x,p.s(490),right,p.s(490),ui::rgb(th::kBorder,0.5f),p.s(1));
-        p.text("Your connection is saved on this PC.",{x,p.s(506),right-p.s(282),p.s(544)},p.s(12),ui::rgb(th::kText3));
-        p.button(ui_,2,{right-p.s(262),p.s(506),right-p.s(166),p.s(544)},"Cancel",ui::ButtonStyle::Ghost);
-        p.button(ui_,1,{right-p.s(154),p.s(506),right,p.s(544)},"Save and connect",ui::ButtonStyle::Primary);
+        const auto entry=[&](HWND edit,float y,const char* label,const char* help) {
+            p.text(label,{x,y,right,y+p.s(20)},p.s(13),ui::rgb(th::kText),ui::Weight::Medium);
+            const Rect box{x,y+p.s(26),right,y+p.s(66)};
+            p.field(box,GetFocus()==edit);
+            place(edit,box);
+            p.text(help,{x,y+p.s(72),right,y+p.s(92)},p.s(12),ui::rgb(th::kText3));
+        };
+        entry(host_,p.s(108),"Host address","Use the host's Tailscale address for remote play.");
+        entry(code_,p.s(214),"Pairing code","The 12-character code displayed on your host.");
 
+        const Rect ts{x,p.s(334),right,p.s(410)};
+        p.card(ts);
+        const Rect tile{ts.l+p.s(16),ts.cy()-p.s(22),ts.l+p.s(60),ts.cy()+p.s(22)};
+        p.icon_tile(tile);
+        network_icon(p,tile,ui::rgb(th::kText));
+        const float bw=p.s(148);
+        p.text("Tailscale",{tile.r+p.s(14),ts.cy()-p.s(20),ts.r-bw-p.s(32),ts.cy()-p.s(1)},p.s(14),ui::rgb(th::kText),ui::Weight::SemiBold);
+        p.text(offline_?"Offline preview":tailscale_.ipv4.empty()?"Sign in on both PCs with the same account.":"This PC: "+tailscale_.ipv4,
+               {tile.r+p.s(14),ts.cy()+p.s(1),ts.r-bw-p.s(32),ts.cy()+p.s(20)},p.s(12),ui::rgb(th::kText2));
+        p.button(ui_,3,{ts.r-p.s(16)-bw,ts.cy()-p.s(17),ts.r-p.s(16),ts.cy()+p.s(17)},tailscale_.installed?"Open Tailscale":"Install Tailscale");
+        p.text(error_,{x,p.s(416),right,p.s(460)},p.s(12.5f),ui::rgb(th::kBad),ui::Weight::Medium,ui::Align::Leading,ui::Align::Center,true);
+
+        const Rect footer{r.l,r.b-p.s(72),r.r,r.b};
+        p.footer_bar(footer);
+        const float by=footer.t+p.s(18);
+        p.text("Your connection is saved on this PC.",{x,footer.t,right-p.s(282),footer.b},p.s(12),ui::rgb(th::kText3));
+        p.button(ui_,2,{right-p.s(262),by,right-p.s(166),by+p.s(36)},"Cancel",ui::ButtonStyle::Ghost);
+        p.button(ui_,1,{right-p.s(154),by,right,by+p.s(36)},"Save and connect",ui::ButtonStyle::Primary);
     }
     void on_action(int id) override
     {
@@ -189,12 +219,14 @@ private:
             s.encoder_name = "Hardware H.264 encoder";
             s.message = "Sample device status. No hardware or network connection is active.";
         } else s = host_.snapshot();
-        const float x=p.s(24),right=r.r-x,split=x+(right-x-p.s(16))*0.55f,side=split+p.s(16);
+        const float x=p.s(28),right=r.r-x,split=x+(right-x-p.s(16))*0.56f;
         menu_header(p,r,"Host",s.host_name);
-        p.button(ui_,5,{right-p.s(144),p.s(24),right,p.s(60)},"Change role",ui::ButtonStyle::Ghost);
-        p.line(split+p.s(8),p.s(124),split+p.s(8),p.s(510),ui::rgb(th::kBorder,0.5f),p.s(1));
-        const float in=x+p.s(4),edge=split-p.s(24),sx=side+p.s(24),sr=right-p.s(4);
-        p.text("Connected devices",{in,p.s(122),edge,p.s(150)},p.s(15),ui::rgb(th::kText),ui::Weight::SemiBold);
+        p.button(ui_,5,{right-p.s(120),p.s(28),right,p.s(64)},"Change role",ui::ButtonStyle::Ghost);
+
+        const Rect devices{x,p.s(108),split,p.s(548)}, pair{split+p.s(16),p.s(108),right,p.s(548)};
+        p.card(devices);
+        p.card(pair);
+        const float in=devices.l+p.s(20),edge=devices.r-p.s(20);
         struct Check { const char* label; bool ok; std::string detail; };
         const Check checks[]={
             {"Controller bridge",s.bridge_ok,s.bridge_ok?s.bridge_port:"Connect the ESP32-S3 UART port"},
@@ -202,37 +234,51 @@ private:
             {"HDMI audio",s.audio_ok,s.audio_ok?s.audio_name:"Searching for capture audio..."},
             {"Hardware encoder",s.encoder_ok,s.encoder_benchmarking?"Benchmarking...":s.encoder_name},
         };
-        float y=p.s(170);
-        for(const auto& check:checks) {
-            p.text(check.label,{in,y,edge-p.s(66),y+p.s(24)},p.s(13),ui::rgb(th::kText),ui::Weight::Medium);
-            p.text(check.ok?"Ready":"Not ready",{edge-p.s(76),y,edge,y+p.s(24)},p.s(12),ui::rgb(check.ok?th::kGood:th::kWarn),ui::Weight::Regular,ui::Align::Trailing);
-            p.text(check.detail,{in,y+p.s(28),edge,y+p.s(58)},p.s(12),ui::rgb(th::kText2),ui::Weight::Regular,ui::Align::Leading,ui::Align::Leading,true);
-            p.line(in,y+p.s(66),edge,y+p.s(66),ui::rgb(th::kBorder,0.5f),p.s(1));
-            y+=p.s(78);
+        int ready=0;
+        for(const auto& check:checks) ready+=check.ok;
+        p.text("Connected devices",{in,devices.t+p.s(18),edge-p.s(120),devices.t+p.s(44)},p.s(15),ui::rgb(th::kText),ui::Weight::SemiBold);
+        p.pill(edge,devices.t+p.s(19),ready==4?"All ready":std::to_string(ready)+" of 4 ready",ready==4?th::kGood:th::kWarn,true);
+        const float pitch=p.s(78);
+        float y=devices.t+p.s(62);
+        for(int i=0;i<4;++i) {
+            const auto& check=checks[i];
+            if(i>0) p.divider(in,edge,y);
+            const float cy=y+pitch/2;
+            p.status_icon(in+p.s(10),cy,check.ok);
+            p.text(check.label,{in+p.s(34),cy-p.s(20),edge-p.s(84),cy-p.s(1)},p.s(13.5f),ui::rgb(th::kText),ui::Weight::Medium);
+            p.text(check.detail,{in+p.s(34),cy+p.s(1),edge,cy+p.s(20)},p.s(12),ui::rgb(th::kText2));
+            p.text(check.ok?"Ready":"Not ready",{edge-p.s(84),cy-p.s(20),edge,cy-p.s(1)},p.s(12),ui::rgb(check.ok?th::kGood:th::kWarn),ui::Weight::Medium,ui::Align::Trailing);
+            y+=pitch;
         }
-        p.text("Pair a client",{sx,p.s(122),sr,p.s(150)},p.s(15),ui::rgb(th::kText),ui::Weight::SemiBold);
-        p.text("Use Tailscale on both PCs, signed into the same account.",{sx,p.s(158),sr,p.s(204)},p.s(12),ui::rgb(th::kText2),ui::Weight::Regular,ui::Align::Leading,ui::Align::Leading,true);
-        p.text("Pairing code",{sx,p.s(214),sr,p.s(238)},p.s(12),ui::rgb(th::kText2));
-        p.fill({sx,p.s(246),sr,p.s(292)},ui::rgb(th::kSurface),p.s(6));
-        p.text(s.pairing_code,{sx+p.s(12),p.s(246),sr-p.s(12),p.s(292)},p.s(20),ui::rgb(th::kText),ui::Weight::SemiBold);
-        float ay=p.s(314);
-        for(const auto& address:s.addresses) {
-            if(ay>p.s(396)) break;
-            p.text(address.tailscale?"Tailscale address":"LAN address",{sx,ay,sr,ay+p.s(22)},p.s(12),ui::rgb(th::kText2));
-            p.text(address.ip+":"+std::to_string(s.port),{sx,ay+p.s(24),sr,ay+p.s(50)},p.s(13),ui::rgb(th::kText));
-            ay+=p.s(62);
-        }
-        p.line(sx,p.s(454),sr,p.s(454),ui::rgb(th::kBorder),p.s(1));
-        p.circle(sx+p.s(4),p.s(482),p.s(3),ui::rgb(s.client_connected?th::kGood:th::kText3));
-        p.text(s.client_connected?"Connected: "+s.client_name:"Waiting for a client",{sx+p.s(16),p.s(468),sr,p.s(496)},p.s(13),ui::rgb(th::kText));
-        p.button(ui_,4,{sx,p.s(510),sx+p.s(164),p.s(544)},"Set up Tailscale");
-        p.line(x,p.s(558),right,p.s(558),ui::rgb(th::kBorder,0.5f),p.s(1));
-        p.text(s.message,{x,p.s(564),right,p.s(592)},p.s(12),ui::rgb(th::kText2),ui::Weight::Regular,ui::Align::Leading,ui::Align::Center,true);
-        p.button(ui_,2,{x,p.s(604),x+p.s(118),p.s(642)},"Find devices");
-        p.button(ui_,3,{right-p.s(294),p.s(604),right-p.s(142),p.s(642)},"New pairing code");
-        p.button(ui_,1,{right-p.s(130),p.s(604),right,p.s(642)},"Wake console",ui::ButtonStyle::Primary);
-        p.text("Closing this window keeps the host in the notification area.",{x,p.s(650),right,p.s(678)},p.s(12),ui::rgb(th::kText3));
 
+        const float sx=pair.l+p.s(20),sr=pair.r-p.s(20);
+        p.text("Pair a client",{sx,pair.t+p.s(18),sr,pair.t+p.s(44)},p.s(15),ui::rgb(th::kText),ui::Weight::SemiBold);
+        p.text("Use Tailscale on both PCs, signed into the same account.",{sx,pair.t+p.s(46),sr,pair.t+p.s(84)},p.s(12.5f),ui::rgb(th::kText2),ui::Weight::Regular,ui::Align::Leading,ui::Align::Leading,true);
+        p.text("Pairing code",{sx,pair.t+p.s(94),sr,pair.t+p.s(112)},p.s(12),ui::rgb(th::kText2),ui::Weight::Medium);
+        const Rect code{sx,pair.t+p.s(118),sr,pair.t+p.s(166)};
+        p.fill(code,ui::rgb(th::kBg),p.s(8));
+        p.stroke(code,ui::rgb(th::kBorderStrong),p.s(1),p.s(8));
+        p.mono(s.pairing_code,code.inset(p.s(16),0),p.s(19),ui::rgb(th::kText));
+        float ay=pair.t+p.s(184);
+        for(const auto& address:s.addresses) {
+            if(ay>pair.t+p.s(270)) break;
+            p.text(address.tailscale?"Tailscale address":"LAN address",{sx,ay,sr,ay+p.s(32)},p.s(12.5f),ui::rgb(th::kText2));
+            p.mono(address.ip+":"+std::to_string(s.port),{sx,ay,sr,ay+p.s(32)},p.s(12.5f),ui::rgb(th::kText),ui::Align::Trailing);
+            p.divider(sx,sr,ay+p.s(32));
+            ay+=p.s(36);
+        }
+        p.divider(sx,sr,pair.b-p.s(104));
+        p.pill(sx,pair.b-p.s(88),s.client_connected?"Connected: "+s.client_name:"Waiting for a client",s.client_connected?th::kGood:th::kText3);
+        p.button(ui_,4,{sx,pair.b-p.s(52),sx+p.s(156),pair.b-p.s(16)},"Set up Tailscale");
+
+        p.text(s.message,{x,p.s(560),right,p.s(600)},p.s(12),ui::rgb(th::kText2),ui::Weight::Regular,ui::Align::Leading,ui::Align::Center,true);
+        const Rect footer{r.l,r.b-p.s(76),r.r,r.b};
+        p.footer_bar(footer);
+        const float by=footer.t+p.s(20);
+        p.button(ui_,2,{x,by,x+p.s(124),by+p.s(36)},"Find devices");
+        p.text("Closing this window keeps the host in the notification area.",{x+p.s(140),footer.t,right-p.s(310),footer.b},p.s(12),ui::rgb(th::kText3),ui::Weight::Regular,ui::Align::Leading,ui::Align::Center,true);
+        p.button(ui_,3,{right-p.s(298),by,right-p.s(146),by+p.s(36)},"New pairing code");
+        p.button(ui_,1,{right-p.s(134),by,right,by+p.s(36)},"Wake console",ui::ButtonStyle::Primary);
     }
     void on_action(int id) override
     {
@@ -294,7 +340,7 @@ int run_preview(const std::string& screen)
     cfg.set_bool("client", "fullscreen", false);
     if (screen == "setup") {
         RoleWindow window;
-        if (!window.create(L"Hikari - Setup preview", 680, 454)) return 1;
+        if (!window.create(L"Hikari - Setup preview", 680, 400)) return 1;
         window.run_modal();
         return 0;
     }
@@ -362,7 +408,7 @@ int run(const std::vector<std::string>& args)
     }
     if (selftest) {
         RoleWindow window;
-        if (!window.create(L"Hikari self-test", 680, 454)) return 1;
+        if (!window.create(L"Hikari self-test", 680, 400)) return 1;
         // Exercise the real rendering and embedded resources without saving settings.
         SendMessageW(window.hwnd(), WM_PAINT, 0, 0);
         window.close();
@@ -371,7 +417,7 @@ int run(const std::vector<std::string>& args)
     for (;;) {
         if (setup || (role != "host" && role != "client")) {
             RoleWindow chooser;
-            if (!chooser.create(L"Welcome to Hikari", 680, 454)) return 1;
+            if (!chooser.create(L"Welcome to Hikari", 680, 400)) return 1;
             chooser.run_modal();
             if (chooser.role.empty()) return 0;
             role = chooser.role;
@@ -385,7 +431,7 @@ int run(const std::vector<std::string>& args)
         std::string next_role;
         const auto change_role = [&](HWND owner) {
             RoleWindow chooser;
-            if (!chooser.create(L"Hikari - Change role", 680, 454, owner)) return false;
+            if (!chooser.create(L"Hikari - Change role", 680, 400, owner)) return false;
             chooser.run_modal();
             if (chooser.role.empty() || chooser.role == role) return false;
             next_role = chooser.role;

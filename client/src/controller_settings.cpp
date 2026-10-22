@@ -32,15 +32,17 @@ using Microsoft::WRL::ComPtr;
 constexpr uint32_t kBg = ui::theme::kBg;
 constexpr uint32_t kPanel = ui::theme::kBg2;
 constexpr uint32_t kPanelBorder = ui::theme::kBorder;
+constexpr uint32_t kControlBorderHover = 0x474A52;
 constexpr uint32_t kControl = ui::theme::kSurface;
 constexpr uint32_t kControlHover = ui::theme::kSurface2;
-constexpr uint32_t kControlBorder = ui::theme::kBorder;
+constexpr uint32_t kControlBorder = ui::theme::kBorderStrong;
 constexpr uint32_t kText = ui::theme::kText;
 constexpr uint32_t kText2 = ui::theme::kText2;
 constexpr uint32_t kText3 = ui::theme::kText3;
-constexpr uint32_t kAmber = 0xFBBB04;
-constexpr uint32_t kInk = 0x1E2127;
-constexpr uint32_t kGreen = 0x3DDC84;
+constexpr uint32_t kAmber = ui::theme::kAccent;
+constexpr uint32_t kInk = ui::theme::kOnAccent;
+constexpr uint32_t kGreen = ui::theme::kGood;
+constexpr uint32_t kTrack = 0x33363D;
 constexpr uint32_t kDanger = 0xFF8A80;
 
 constexpr float kPi = 3.14159265f;
@@ -90,7 +92,7 @@ struct GroupDef {
 };
 
 const GroupDef kGroups[] = {
-    {L"BUTTONS",
+    {L"Buttons",
      0,
      8,
      {{SwitchInput::A, L"A"},
@@ -101,7 +103,7 @@ const GroupDef kGroups[] = {
       {SwitchInput::Minus, L"Minus"},
       {SwitchInput::Home, L"Home"},
       {SwitchInput::Capture, L"Capture"}}},
-    {L"LEFT STICK",
+    {L"Left stick",
      1,
      5,
      {{SwitchInput::LStickClick, L"Button"},
@@ -109,14 +111,14 @@ const GroupDef kGroups[] = {
       {SwitchInput::LStickDown, L"Down"},
       {SwitchInput::LStickLeft, L"Left"},
       {SwitchInput::LStickRight, L"Right"}}},
-    {L"DIRECTIONAL PAD",
+    {L"Directional pad",
      1,
      4,
      {{SwitchInput::DpadUp, L"Up"},
       {SwitchInput::DpadDown, L"Down"},
       {SwitchInput::DpadLeft, L"Left"},
       {SwitchInput::DpadRight, L"Right"}}},
-    {L"RIGHT STICK",
+    {L"Right stick",
      2,
      5,
      {{SwitchInput::RStickClick, L"Button"},
@@ -124,7 +126,7 @@ const GroupDef kGroups[] = {
       {SwitchInput::RStickDown, L"Down"},
       {SwitchInput::RStickLeft, L"Left"},
       {SwitchInput::RStickRight, L"Right"}}},
-    {L"TRIGGERS",
+    {L"Triggers",
      2,
      4,
      {{SwitchInput::L, L"L"}, {SwitchInput::R, L"R"}, {SwitchInput::ZL, L"ZL"}, {SwitchInput::ZR, L"ZR"}}},
@@ -310,6 +312,9 @@ private:
     void button(const D2D1_RECT_F& r, const wchar_t* label, Hit h, BtnStyle style, bool enabled = true);
     void dropdown(const D2D1_RECT_F& r, const std::wstring& value, Hit h, bool open);
     void shadow(const D2D1_RECT_F& r, float radius, float strength);
+    void fill_gradient(const D2D1_RECT_F& r, float radius, const D2D1_COLOR_F& top, const D2D1_COLOR_F& bottom);
+    void card(const D2D1_RECT_F& r);
+    void highlight(const D2D1_RECT_F& r, float radius, float alpha);
     float flash_amount(int i) const;
 
     Config& cfg_;
@@ -407,8 +412,8 @@ bool SettingsWindow::create_factories()
     }
     f_title_ = make_format(display_family, DWRITE_FONT_WEIGHT_SEMI_BOLD, 22.0f);
     f_dlg_title_ = make_format(display_family, DWRITE_FONT_WEIGHT_SEMI_BOLD, 17.0f);
-    f_sub_ = make_format(text_family, DWRITE_FONT_WEIGHT_NORMAL, 12.5f);
-    f_caption_ = make_format(text_family, DWRITE_FONT_WEIGHT_SEMI_BOLD, 11.0f);
+    f_sub_ = make_format(text_family, DWRITE_FONT_WEIGHT_NORMAL, 13.0f);
+    f_caption_ = make_format(text_family, DWRITE_FONT_WEIGHT_SEMI_BOLD, 12.0f);
     f_body_ = make_format(text_family, DWRITE_FONT_WEIGHT_NORMAL, 13.5f);
     f_body_sb_ = make_format(text_family, DWRITE_FONT_WEIGHT_SEMI_BOLD, 13.5f);
     f_small_ = make_format(text_family, DWRITE_FONT_WEIGHT_NORMAL, 12.0f);
@@ -719,7 +724,7 @@ void SettingsWindow::compute_layout()
     const float M = 24.0f;
 
     // Toolbar: captions above the controls.
-    const float cap_y = 76.0f, ctl_y = 96.0f, ctl_h = 36.0f;
+    const float cap_y = 78.0f, ctl_y = 98.0f, ctl_h = 36.0f;
     float x = M;
     L.cap_dev = {x, cap_y};
     L.dev = {x, ctl_y, x + 300, ctl_y + ctl_h};
@@ -733,7 +738,7 @@ void SettingsWindow::compute_layout()
     L.del = {L.save_as.right + 8, ctl_y, L.save_as.right + 8 + 84, ctl_y + ctl_h};
 
     // Content cards.
-    const float top = 148.0f, bottom = L.h - 74.0f;
+    const float top = 148.0f, bottom = L.h - 92.0f;
     const float left_w = std::clamp(L.w * 0.57f, 600.0f, 800.0f);
     L.left_card = {M, top, M + left_w, bottom};
     L.art_card = {L.left_card.right + 16, top, L.w - M, bottom};
@@ -801,7 +806,7 @@ void SettingsWindow::compute_layout()
     L.art_hint = {ain.left, ain.bottom - 24, ain.right, ain.bottom};
 
     // Footer.
-    const float fy = L.h - 56.0f, fh = 38.0f;
+    const float fy = L.h - 55.0f, fh = 36.0f;
     L.close = {L.w - M - 104, fy, L.w - M, fy + fh};
     L.save = {L.close.left - 10 - 120, fy, L.close.left - 10, fy + fh};
     L.reset = {L.save.left - 22 - 156, fy, L.save.left - 22, fy + fh};
@@ -1146,10 +1151,42 @@ void SettingsWindow::stroke_rr(const D2D1_RECT_F& r, float radius, const D2D1_CO
 
 void SettingsWindow::shadow(const D2D1_RECT_F& r, float radius, float strength)
 {
-    for (int i = 1; i <= 4; ++i) {
-        const float g = static_cast<float>(i) * 3.0f;
-        fill_rr({r.left - g, r.top - g + 6, r.right + g, r.bottom + g + 6}, radius + g, col(0x000000, strength / 4.0f));
+    // Matches ui::Painter::shadow: stacked layers approximate a soft, offset blur.
+    constexpr int kLayers = 6;
+    for (int i = 1; i <= kLayers; ++i) {
+        const float g = 1.6f * static_cast<float>(i), dy = 2.0f + 0.7f * static_cast<float>(i);
+        fill_rr({r.left - g, r.top - g + dy, r.right + g, r.bottom + g + dy}, radius + g,
+                col(0x000000, strength * (1.0f - static_cast<float>(i) / (kLayers + 1)) / 3.0f));
     }
+}
+
+void SettingsWindow::fill_gradient(const D2D1_RECT_F& r, float radius, const D2D1_COLOR_F& top, const D2D1_COLOR_F& bottom)
+{
+    const D2D1_GRADIENT_STOP stops[] = {{0.0f, top}, {1.0f, bottom}};
+    ComPtr<ID2D1GradientStopCollection> collection;
+    ComPtr<ID2D1LinearGradientBrush> gradient;
+    if (FAILED(rt_->CreateGradientStopCollection(stops, 2, &collection)) ||
+        FAILED(rt_->CreateLinearGradientBrush(D2D1::LinearGradientBrushProperties({r.left, r.top}, {r.left, r.bottom}),
+                                              collection.Get(), &gradient))) {
+        fill_rr(r, radius, bottom);
+        return;
+    }
+    rt_->FillRoundedRectangle(D2D1::RoundedRect(r, radius, radius), gradient.Get());
+}
+
+void SettingsWindow::card(const D2D1_RECT_F& r)
+{
+    shadow(r, 12, 0.32f);
+    fill_rr(r, 12, col(kPanel));
+    stroke_rr(r, 12, col(0xFFFFFF, 0.065f), 1.0f);
+    brush_->SetColor(col(0xFFFFFF, 0.035f));
+    rt_->DrawLine({r.left + 12, r.top + 1.5f}, {r.right - 12, r.top + 1.5f}, brush_.Get(), 1.0f);
+}
+
+void SettingsWindow::highlight(const D2D1_RECT_F& r, float radius, float alpha)
+{
+    brush_->SetColor(col(0xFFFFFF, alpha));
+    rt_->DrawLine({r.left + radius, r.top + 1.5f}, {r.right - radius, r.top + 1.5f}, brush_.Get(), 1.0f);
 }
 
 void SettingsWindow::text(const std::wstring& s, const D2D1_RECT_F& r, IDWriteTextFormat* f, const D2D1_COLOR_F& c,
@@ -1183,37 +1220,39 @@ void SettingsWindow::button(const D2D1_RECT_F& r, const wchar_t* label, Hit h, B
 {
     const bool hov = enabled && hover_ == h;
     const bool down = hov && pressed_ == h;
-    D2D1_COLOR_F bg, fg, border = col(kControlBorder);
-    switch (style) {
-    case BtnStyle::Primary:
-        bg = col(down ? 0xE0A800 : hov ? 0xFFC933 : kAmber);
-        fg = col(kInk);
-        border = bg;
-        break;
-    case BtnStyle::Danger:
-        bg = col(down ? 0x5A2E2C : hov ? 0x4A2A2A : kControl);
-        fg = col(kDanger);
-        break;
-    default:
-        bg = col(down ? 0x30353D : hov ? kControlHover : kControl);
-        fg = col(kText);
-        break;
-    }
+    D2D1_COLOR_F fg;
     if (!enabled) {
-        bg = col(kControl, 0.6f);
+        fill_rr(r, 8, col(kControl, 0.5f));
+        stroke_rr(r, 8, col(kControlBorder, 0.5f), 1.0f);
         fg = col(kText3);
-        border = col(kControlBorder, 0.6f);
+    } else if (style == BtnStyle::Primary) {
+        if (!down) shadow(r, 8, 0.30f);
+        if (down) fill_rr(r, 8, col(ui::theme::kAccentDown));
+        else fill_gradient(r, 8, col(hov ? 0xFFD452 : 0xFFC52A), col(hov ? 0xFFC21A : kAmber));
+        stroke_rr(r, 8, col(0x000000, 0.22f), 1.0f);
+        if (!down) highlight(r, 8, 0.38f);
+        fg = col(kInk);
+    } else if (style == BtnStyle::Danger) {
+        fill_rr(r, 8, col(ui::theme::kBad, down ? 0.30f : hov ? 0.22f : 0.12f));
+        stroke_rr(r, 8, col(ui::theme::kBad, 0.35f), 1.0f);
+        fg = col(kDanger);
+    } else {
+        if (down) fill_rr(r, 8, col(0x1B1C20));
+        else fill_gradient(r, 8, col(hov ? 0x2D2F35 : 0x25272C), col(hov ? 0x26282D : 0x1F2024));
+        stroke_rr(r, 8, col(hov ? kControlBorderHover : kControlBorder), 1.0f);
+        if (!down) highlight(r, 8, 0.05f);
+        fg = col(kText);
     }
-    fill_rr(r, 8, bg);
-    stroke_rr(r, 8, border, 1.0f);
-    text(label, r, f_body_sb_.Get(), fg, DWRITE_TEXT_ALIGNMENT_CENTER);
+    text(label, down ? D2D1_RECT_F{r.left, r.top + 1, r.right, r.bottom + 1} : r, f_body_sb_.Get(), fg, DWRITE_TEXT_ALIGNMENT_CENTER);
 }
 
 void SettingsWindow::dropdown(const D2D1_RECT_F& r, const std::wstring& value, Hit h, bool open)
 {
     const bool hov = hover_ == h;
-    fill_rr(r, 8, col(hov || open ? kControlHover : kControl));
-    stroke_rr(r, 8, open ? col(kAmber) : col(kControlBorder), open ? 1.5f : 1.0f);
+    if (open) fill_rr({r.left - 3, r.top - 3, r.right + 3, r.bottom + 3}, 11, col(kAmber, 0.16f));
+    fill_gradient(r, 8, col(hov || open ? 0x2D2F35 : 0x25272C), col(hov || open ? 0x26282D : 0x1F2024));
+    stroke_rr(r, 8, open ? col(kAmber) : col(hov ? kControlBorderHover : kControlBorder), 1.0f);
+    if (!open) highlight(r, 8, 0.05f);
     text(value, {r.left + 12, r.top, r.right - 34, r.bottom}, f_body_.Get(), col(kText));
     chevron(r.right - 18, (r.top + r.bottom) * 0.5f, 4.5f, open, col(kText2));
 }
@@ -1230,11 +1269,11 @@ void SettingsWindow::draw_header()
 void SettingsWindow::draw_toolbar()
 {
     const auto caption = [&](D2D1_POINT_2F p, const wchar_t* s) {
-        text(s, {p.x + 2, p.y, p.x + 300, p.y + 16}, f_caption_.Get(), col(kText2));
+        text(s, {p.x + 1, p.y - 1, p.x + 300, p.y + 17}, f_caption_.Get(), col(kText2));
     };
-    caption(lay_.cap_dev, L"INPUT DEVICE");
-    caption(lay_.cap_layout, L"LAYOUT");
-    caption(lay_.cap_profile, L"PROFILE");
+    caption(lay_.cap_dev, L"Input device");
+    caption(lay_.cap_layout, L"Layout");
+    caption(lay_.cap_profile, L"Profile");
 
     const std::wstring dev = device_sel_ >= 0 && device_sel_ < static_cast<int>(device_items_.size())
                                  ? device_items_[static_cast<size_t>(device_sel_)]
@@ -1258,6 +1297,7 @@ void SettingsWindow::draw_binding(int i)
     const float pulse = 0.5f + 0.5f * std::sin(static_cast<float>(t_) * 2.0f * kPi * 1.3f);
 
     fill_rr(r, 7, cap ? col(kAmber, 0.10f) : col(hov ? kControlHover : kControl));
+    if (!cap) highlight(r, 7, 0.035f);
     const float fl = flash_amount(i);
     if (fl > 0) fill_rr(r, 7, col(kAmber, 0.35f * fl));
     if (cap) {
@@ -1265,7 +1305,7 @@ void SettingsWindow::draw_binding(int i)
     } else if (foc) {
         stroke_rr(r, 7, col(kAmber), 1.5f);
     } else {
-        stroke_rr(r, 7, col(hov ? 0x4A515C : kControlBorder), 1.0f);
+        stroke_rr(r, 7, col(hov ? kControlBorderHover : kControlBorder), 1.0f);
     }
 
     const D2D1_RECT_F content = {r.left + 8, r.top, r.right - 8, r.bottom};
@@ -1290,9 +1330,9 @@ void SettingsWindow::draw_binding(int i)
         const float cx = (r.left + r.right) * 0.5f, cy = (r.top + r.bottom) * 0.5f;
         const float kw = std::max(tw + 18.0f, 26.0f);
         const D2D1_RECT_F key = {cx - kw * 0.5f, cy - 11, cx + kw * 0.5f, cy + 10};
-        fill_rr({key.left, key.top + 2, key.right, key.bottom + 2}, 5, col(0x15181C));
-        fill_rr(key, 5, col(0x434A55));
-        stroke_rr(key, 5, col(0xFFFFFF, 0.08f), 1.0f);
+        fill_rr({key.left, key.top + 2, key.right, key.bottom + 2}, 5, col(0x050506));
+        fill_gradient(key, 5, col(0x3A3D45), col(0x2E3036));
+        stroke_rr(key, 5, col(0xFFFFFF, 0.09f), 1.0f);
         text(name, {key.left + 4, key.top, key.right - 4, key.bottom}, f_key_.Get(), col(kText),
              DWRITE_TEXT_ALIGNMENT_CENTER);
     } else {
@@ -1308,15 +1348,15 @@ void SettingsWindow::draw_binding(int i)
 
 void SettingsWindow::draw_bindings()
 {
-    const D2D1_RECT_F card = lay_.left_card;
-    fill_rr(card, 12, col(kPanel));
+    card(lay_.left_card);
 
     // Gamepad / Keyboard segmented tabs.
-    fill_rr(lay_.tabs, 9, col(0x1B1E23));
+    fill_rr(lay_.tabs, 9, col(kBg));
     stroke_rr(lay_.tabs, 9, col(kPanelBorder), 1.0f);
     const auto tab = [&](const D2D1_RECT_F& r, const wchar_t* label, bool sel, Hit h) {
         if (sel) {
-            fill_rr(r, 7, col(kControlHover));
+            fill_gradient(r, 7, col(0x2D2F35), col(0x25272C));
+            stroke_rr(r, 7, col(0xFFFFFF, 0.08f), 1.0f);
             fill_rr({(r.left + r.right) * 0.5f - 14, r.bottom - 4, (r.left + r.right) * 0.5f + 14, r.bottom - 2}, 1,
                     col(kAmber));
         } else if (hover_ == h) {
@@ -1346,7 +1386,7 @@ void SettingsWindow::draw_bindings()
         const D2D1_RECT_F h = lay_.group_hdr[gi];
         text(g.title, h, f_caption_.Get(), col(kText2));
         const float tw = text_width(g.title, f_caption_.Get());
-        brush_->SetColor(col(kPanelBorder));
+        brush_->SetColor(col(0xFFFFFF, 0.06f));
         const float ly = std::floor((h.top + h.bottom) * 0.5f) + 0.5f;
         if (h.left + tw + 10 < h.right) rt_->DrawLine({h.left + tw + 10, ly}, {h.right, ly}, brush_.Get(), 1.0f);
         for (int r = 0; r < g.count; ++r) {
@@ -1363,7 +1403,7 @@ void SettingsWindow::draw_bindings()
 
 void SettingsWindow::draw_options()
 {
-    brush_->SetColor(col(kPanelBorder));
+    brush_->SetColor(col(0xFFFFFF, 0.06f));
     const float y = std::floor(lay_.options_divider) + 0.5f;
     rt_->DrawLine({lay_.left_card.left + 18, y}, {lay_.left_card.right - 18, y}, brush_.Get(), 1.0f);
 
@@ -1375,7 +1415,7 @@ void SettingsWindow::draw_options()
         const float cy = (r.top + r.bottom) * 0.5f;
         const D2D1_RECT_F track = {r.left, cy - 10, r.left + 38, cy + 10};
         // Track colour blends from grey to amber as the knob travels.
-        const D2D1_COLOR_F off = col(0x3A404A), on = col(kAmber);
+        const D2D1_COLOR_F off = col(kTrack), on = col(kAmber);
         const D2D1_COLOR_F tc = {off.r + (on.r - off.r) * a, off.g + (on.g - off.g) * a, off.b + (on.b - off.b) * a, 1};
         fill_rr(track, 10, tc);
         if (hov) stroke_rr(track, 10, col(0xFFFFFF, 0.25f), 1.0f);
@@ -1390,7 +1430,7 @@ void SettingsWindow::draw_options()
     const D2D1_RECT_F t = lay_.slider_track;
     const float v = std::clamp(work_.stick_deadzone / 0.3f, 0.0f, 1.0f);
     const float kx = t.left + (t.right - t.left) * v;
-    fill_rr(t, 2, col(0x3A404A));
+    fill_rr(t, 2, col(kTrack));
     fill_rr({t.left, t.top, kx, t.bottom}, 2, col(kAmber));
     const float cy = (t.top + t.bottom) * 0.5f;
     if (hov) {
@@ -1410,8 +1450,7 @@ void SettingsWindow::draw_options()
 
 void SettingsWindow::draw_art_card()
 {
-    const D2D1_RECT_F card = lay_.art_card;
-    fill_rr(card, 12, col(kPanel));
+    card(lay_.art_card);
 
     const D2D1_RECT_F a = lay_.pill_anchor;
     text(deps_.model == joycon::Model::Switch2 ? L"Switch 2" : L"Controller", {a.left + 2, a.top, a.right, a.bottom}, f_caption_.Get(), col(kText2));
@@ -1470,6 +1509,9 @@ void SettingsWindow::draw_art_card()
 
 void SettingsWindow::draw_footer()
 {
+    fill_rr({0, lay_.h - 74.0f, lay_.w, lay_.h}, 0, col(kPanel));
+    brush_->SetColor(col(kPanelBorder));
+    rt_->DrawLine({0, lay_.h - 73.5f}, {lay_.w, lay_.h - 73.5f}, brush_.Get(), 1.0f);
     button(lay_.reset, L"Reset to defaults", {El::Reset, 0}, BtnStyle::Secondary);
     button(lay_.save, L"Save", {El::Save, 0}, BtnStyle::Primary);
     button(lay_.close, L"Close", {El::Close, 0}, BtnStyle::Secondary);
@@ -1491,8 +1533,9 @@ void SettingsWindow::draw_popup()
     if (drop_ == Drop::None) return;
     const D2D1_RECT_F p = popup_rect();
     shadow(p, 10, 0.35f);
-    fill_rr(p, 10, col(0x2B2F36));
+    fill_rr(p, 10, col(0x1E1F23));
     stroke_rr(p, 10, col(kControlBorder), 1.0f);
+    highlight(p, 10, 0.05f);
     const auto items = drop_items(drop_);
     const int sel = drop_selected(drop_);
     for (size_t i = 0; i < items.size(); ++i) {
@@ -1515,15 +1558,17 @@ void SettingsWindow::draw_dialog()
     const D2D1_RECT_F d = dialog_rect();
     shadow(d, 14, 0.5f);
     fill_rr(d, 14, col(kPanel));
-    stroke_rr(d, 14, col(0x3A404A), 1.0f);
+    stroke_rr(d, 14, col(0xFFFFFF, 0.08f), 1.0f);
+    highlight(d, 14, 0.04f);
     // Amber accent bar.
     fill_rr({d.left + 24, d.top + 20, d.left + 52, d.top + 23}, 1.5f, col(dlg_.danger ? kDanger : kAmber));
     text(dlg_.title, {d.left + 24, d.top + 28, d.right - 24, d.top + 58}, f_dlg_title_.Get(), col(kText));
     if (dlg_.kind == DlgKind::TextEntry) {
         text(dlg_.message, {d.left + 24, d.top + 58, d.right - 24, d.top + 84}, f_small_.Get(), col(kText2));
         const D2D1_RECT_F f = dialog_field_rect();
-        fill_rr(f, 8, col(0x1B1E23));
-        stroke_rr(f, 8, col(kAmber), 1.5f);
+        fill_rr({f.left - 3, f.top - 3, f.right + 3, f.bottom + 3}, 11, col(kAmber, 0.16f));
+        fill_rr(f, 8, col(kControl));
+        stroke_rr(f, 8, col(kAmber), 1.0f);
         const D2D1_RECT_F tr = {f.left + 12, f.top, f.right - 12, f.bottom};
         if (dlg_.text.empty()) text(L"Profile name", tr, f_body_.Get(), col(kText3));
         else text(dlg_.text, tr, f_body_.Get(), col(kText));
@@ -1696,21 +1741,7 @@ LRESULT SettingsWindow::handle(UINT msg, WPARAM wp, LPARAM lp)
     return DefWindowProcW(hwnd_, msg, wp, lp);
 }
 
-void apply_dark_title_bar(HWND hwnd)
-{
-    // dwmapi is loaded dynamically so the UI library adds no link dependency.
-    HMODULE dwm = LoadLibraryW(L"dwmapi.dll");
-    if (!dwm) return;
-    using SetAttr = HRESULT(WINAPI*)(HWND, DWORD, LPCVOID, DWORD);
-    auto set = reinterpret_cast<SetAttr>(reinterpret_cast<void*>(GetProcAddress(dwm, "DwmSetWindowAttribute")));
-    if (set) {
-        const BOOL dark = TRUE;
-        set(hwnd, 20 /* DWMWA_USE_IMMERSIVE_DARK_MODE */, &dark, sizeof(dark));
-        const COLORREF caption = RGB(0x1E, 0x21, 0x27);
-        set(hwnd, 35 /* DWMWA_CAPTION_COLOR, Windows 11 */, &caption, sizeof(caption));
-    }
-    FreeLibrary(dwm);
-}
+void apply_dark_title_bar(HWND hwnd) { ui::style_window(hwnd); }
 
 bool SettingsWindow::run(HWND parent)
 {

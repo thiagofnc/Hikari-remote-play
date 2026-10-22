@@ -154,7 +154,7 @@ int ClientApp::run(Config& cfg, ClientHooks hooks)
     wc.hIcon = LoadIconW(wc.hInstance, MAKEINTRESOURCEW(1));
     wc.hIconSm = wc.hIcon;
     wc.lpszClassName = L"HikariClient";
-    wc.hbrBackground = CreateSolidBrush(RGB(17, 18, 22));
+    wc.hbrBackground = CreateSolidBrush(RGB(0x0E, 0x0F, 0x11));
     RegisterClassExW(&wc);
 
     const UINT dpi = GetDpiForSystem();
@@ -172,6 +172,7 @@ int ClientApp::run(Config& cfg, ClientHooks hooks)
     if (auto f = reinterpret_cast<SetAttr>(reinterpret_cast<void*>(
             GetProcAddress(LoadLibraryW(L"dwmapi.dll"), "DwmSetWindowAttribute"))))
         f(hwnd_, 20 /*DWMWA_USE_IMMERSIVE_DARK_MODE*/, &dark, sizeof(dark));
+    ui::style_window(hwnd_);
 
     load_settings();
 
@@ -686,39 +687,46 @@ void ClientApp::draw_lobby(ui::Painter& p, const Rect& r)
     const bool have = have_status_ && connected;
     p.background(r);
     const float m = p.s(24), right = r.r-m;
-    p.logo({m,p.s(28),m+p.s(24),p.s(52)});
-    p.text("Remote play", {m+p.s(38),p.s(22),right-p.s(384),p.s(54)},p.s(22),ui::rgb(th::kText),Weight::SemiBold);
-    p.text("Your console and stream preferences.", {m+p.s(38),p.s(56),right,p.s(80)},p.s(13),ui::rgb(th::kText2));
-    if(p.button(ui_,kActChangeRole,{right-p.s(372),p.s(24),right-p.s(248),p.s(60)},"Change role",ButtonStyle::Ghost,bool(hooks_.change_role))) post_action(kActChangeRole);
-    if(p.button(ui_,kActController,{right-p.s(236),p.s(24),right-p.s(124),p.s(60)},"Controller")) post_action(kActController);
-    if(p.button(ui_,kActConnection,{right-p.s(112),p.s(24),right,p.s(60)},"Connection")) post_action(kActSettings);
+    p.logo({m,p.s(28),m+p.s(28),p.s(56)});
+    p.text("Remote play", {m+p.s(42),p.s(22),right-p.s(384),p.s(52)},p.s(22),ui::rgb(th::kText),Weight::SemiBold);
+    p.text("Your console and stream preferences.", {m+p.s(42),p.s(52),right-p.s(384),p.s(74)},p.s(13),ui::rgb(th::kText2));
+    if(p.button(ui_,kActChangeRole,{right-p.s(372),p.s(28),right-p.s(248),p.s(64)},"Change role",ButtonStyle::Ghost,bool(hooks_.change_role))) post_action(kActChangeRole);
+    if(p.button(ui_,kActController,{right-p.s(236),p.s(28),right-p.s(124),p.s(64)},"Controller")) post_action(kActController);
+    if(p.button(ui_,kActConnection,{right-p.s(112),p.s(28),right,p.s(64)},"Connection")) post_action(kActSettings);
 
-    const float split = m+(r.w()-m*3)*0.62f, side=split+p.s(16);
-    const float top=p.s(100), bottom=r.b-p.s(52), session_bottom=top+p.s(220);
-    p.fill({m,top,split,session_bottom},ui::rgb(th::kBg2),p.s(8));
-    p.line(split+p.s(8),top+p.s(12),split+p.s(8),bottom,ui::rgb(th::kBorder,0.5f),p.s(1));
-    const float x=m+p.s(22), inner=split-p.s(22), sx=side+p.s(22), sr=right-p.s(22);
+    const Rect status_bar{r.l,r.b-p.s(36),r.r,r.b};
+    const float split = m+(r.w()-m*3)*0.62f, side=split+m;
+    const float top=p.s(96), bottom=status_bar.t-p.s(20), session_bottom=top+p.s(228);
+    const Rect session{m,top,split,session_bottom};
+    p.card(session);
+    const float x=m+p.s(24), inner=split-p.s(24);
     const bool awake=have && st.console==ConsoleState::Ready;
     const std::string host=have && st.host_name[0] ? st.host_name : host_label_;
+    // The console sits on a recessed stage at the right of the session card.
     const float art_width=std::clamp((inner-x)*0.44f,p.s(174),p.s(300));
-    const float text_right=inner-art_width-p.s(20);
+    const Rect stage{split-p.s(12)-art_width,top+p.s(12),split-p.s(12),session_bottom-p.s(12)};
+    p.fill(stage,ui::rgb(th::kBg,0.7f),p.s(9));
+    p.stroke(stage,ui::rgb(0xFFFFFF,0.04f),p.s(1),p.s(9));
+    const float text_right=stage.l-p.s(20);
     const bool switch2_preview=hooks_.preview=="switch2";
     const std::string console_name=switch2_preview?"Switch 2":"Switch";
-    p.text(host.empty()?"Your "+console_name:host+"'s "+console_name,{x,top+p.s(18),text_right,top+p.s(48)},p.s(18),ui::rgb(th::kText),Weight::SemiBold);
+    p.text(host.empty()?"Your "+console_name:host+"'s "+console_name,{x,top+p.s(22),text_right,top+p.s(50)},p.s(20),ui::rgb(th::kText),Weight::SemiBold);
     std::string state="Waiting for the host";
+    uint32_t state_color=th::kText3;
     if(have) switch(st.console) {
-    case ConsoleState::Ready: state="Ready to play"; break;
-    case ConsoleState::Asleep: state="Asleep. Play will wake your console."; break;
-    case ConsoleState::Off: state="Off or undocked"; break;
-    case ConsoleState::Waking: state="Waking your console"; break;
-    case ConsoleState::AwakeNoVideo: state="Waiting for an HDMI signal"; break;
+    case ConsoleState::Ready: state="Ready to play"; state_color=th::kGood; break;
+    case ConsoleState::Asleep: state="Asleep. Play will wake your console."; state_color=th::kWarn; break;
+    case ConsoleState::Off: state="Off or undocked"; state_color=th::kWarn; break;
+    case ConsoleState::Waking: state="Waking your console"; state_color=th::kAccent; break;
+    case ConsoleState::AwakeNoVideo: state="Waiting for an HDMI signal"; state_color=th::kWarn; break;
     default: state="Checking your console"; break;
     }
-    p.text(state,{x,top+p.s(52),text_right,top+p.s(92)},p.s(13),ui::rgb(th::kText2),Weight::Regular,Align::Leading,Align::Leading,true);
-    p.console({inner-art_width,top+p.s(18),inner,session_bottom-p.s(18)},awake?th::kGood:th::kWarn,
+    p.circle(x+p.s(4),top+p.s(64),p.s(3.5f),ui::rgb(state_color));
+    p.text(state,{x+p.s(16),top+p.s(54),text_right,top+p.s(92)},p.s(13),ui::rgb(th::kText2),Weight::Regular,Align::Leading,Align::Leading,true);
+    p.console(stage.inset(p.s(14),p.s(12)),awake?th::kGood:th::kWarn,
               switch2_preview?ui::ConsoleModel::Switch2:ui::ConsoleModel::Switch);
     const bool progress=have && st.phase!=SessionPhase::Lobby && st.phase!=SessionPhase::Failed;
-    float y=top+p.s(100);
+    float y=top+p.s(104);
     if(progress) {
         const int current=st.phase==SessionPhase::Waking?0:st.phase==SessionPhase::WaitingForVideo?1:st.phase==SessionPhase::WaitingForController?2:3;
         const char* steps[]={"Wake","Picture","Controller","Stream"};
@@ -726,13 +734,14 @@ void ClientApp::draw_lobby(ui::Painter& p, const Rect& r)
         const bool compact_steps=text_right-x<p.s(330);
         if(compact_steps) {
             p.spinner(x+p.s(8),y+p.s(10),p.s(7),ui::rgb(th::kAccent));
-            p.text(steps[current],{x+p.s(24),y,text_right,y+p.s(24)},p.s(13),ui::rgb(th::kText));
+            p.text(steps[current],{x+p.s(24),y,text_right,y+p.s(24)},p.s(13),ui::rgb(th::kText),Weight::Medium);
         } else for(int i=0;i<4;++i) {
             const float cx=x+step*i+p.s(8);
-            if(i<3) p.line(cx+p.s(12),y+p.s(8),cx+step-p.s(12),y+p.s(8),ui::rgb(i<current?th::kAccent:th::kBorder),p.s(1));
+            if(i<3) p.line(cx+p.s(12),y+p.s(8),cx+step-p.s(12),y+p.s(8),ui::rgb(i<current?th::kAccent:th::kBorderStrong),p.s(1.5f));
             if(i==current) p.spinner(cx,y+p.s(8),p.s(7),ui::rgb(th::kAccent));
-            else p.circle(cx,y+p.s(8),p.s(4),ui::rgb(i<current?th::kAccent:th::kBorder));
-            p.text(steps[i],{cx-p.s(8),y+p.s(21),cx+step-p.s(10),y+p.s(40)},p.s(11),ui::rgb(i<=current?th::kText:th::kText3));
+            else if(i<current) p.circle(cx,y+p.s(8),p.s(4.5f),ui::rgb(th::kAccent));
+            else p.circle(cx,y+p.s(8),p.s(4),ui::rgb(th::kBorderStrong),false,p.s(1.5f));
+            p.text(steps[i],{cx-p.s(8),y+p.s(21),cx+step-p.s(10),y+p.s(40)},p.s(11.5f),ui::rgb(i<=current?th::kText:th::kText3),i==current?Weight::Medium:Weight::Regular);
         }
         const float message_y=y+p.s(compact_steps?28:42);
         p.text(st.message[0]?st.message:proto::to_string(st.phase),{x,message_y,text_right,message_y+p.s(30)},p.s(12),ui::rgb(th::kText2),Weight::Regular,Align::Leading,Align::Leading,true);
@@ -744,52 +753,84 @@ void ClientApp::draw_lobby(ui::Painter& p, const Rect& r)
         const int action=setup?kActSettings:failed?kActRetry:kActPlay;
         if (ui_.focus_id < 0) ui_.focus_id=action;
         if(failed) {
-            p.text(st.message[0]?st.message:"Could not start the session",{x,y-p.s(12),text_right,y+p.s(34)},p.s(13),ui::rgb(th::kBad),Weight::Regular,Align::Leading,Align::Center,true);
+            p.text(st.message[0]?st.message:"Could not start the session",{x,y-p.s(14),text_right,y+p.s(32)},p.s(13),ui::rgb(th::kBad),Weight::Medium,Align::Leading,Align::Center,true);
             y+=p.s(40);
         }
-        if(p.button(ui_,action,{x,y,x+p.s(164),y+p.s(38)},setup?"Set up connection":failed?"Try again":"Play",ButtonStyle::Primary,setup||have)) post_action(action);
-        p.text(setup?"Enter your host address and pairing code.":failed?"Check the host, then retry.":have?"Or press A on your controller.":"Keep the host app running on your other PC.",
-               {x,y+p.s(46),text_right,y+p.s(80)},p.s(12),ui::rgb(th::kText3),Weight::Regular,Align::Leading,Align::Leading,true);
+        if(p.button(ui_,action,{x,y,x+p.s(164),y+p.s(40)},setup?"Set up connection":failed?"Try again":"Play",ButtonStyle::Primary,setup||have)) post_action(action);
+        const Rect hint{x,y+p.s(50),text_right,y+p.s(72)};
+        if(have && !setup && !failed) {
+            // "Or press [A] on your controller." with a drawn keycap.
+            const float lead=p.text_width("Or press",p.s(12));
+            p.text("Or press",hint,p.s(12),ui::rgb(th::kText3));
+            const float kw=p.keycap(hint.l+lead+p.s(6),hint.cy(),"A");
+            p.text("on your controller.",{hint.l+lead+kw+p.s(12),hint.t,hint.r,hint.b},p.s(12),ui::rgb(th::kText3));
+        } else {
+            p.text(setup?"Enter your host address and pairing code.":failed?"Check the host, then retry.":"Keep the host app running on your other PC.",
+                   {hint.l,hint.t,hint.r,hint.b+p.s(12)},p.s(12),ui::rgb(th::kText3),Weight::Regular,Align::Leading,Align::Leading,true);
+        }
         if(have && !failed && st.issue!=proto::HostIssue::None)
-            p.text(proto::to_string(st.issue),{x,y+p.s(82),text_right,y+p.s(106)},p.s(12),ui::rgb(th::kWarn));
+            p.text(proto::to_string(st.issue),{x,y+p.s(78),text_right,y+p.s(100)},p.s(12),ui::rgb(th::kWarn));
     }
-    const float prefs=session_bottom+p.s(16), row_start=prefs+p.s(60);
-    p.text("Stream preference",{x,prefs+p.s(16),inner,prefs+p.s(42)},p.s(15),ui::rgb(th::kText),Weight::SemiBold);
+
+    const Rect prefs{m,session_bottom+p.s(16),split,bottom};
+    p.card(prefs);
+    p.text("Stream preference",{x,prefs.t+p.s(18),inner,prefs.t+p.s(44)},p.s(15),ui::rgb(th::kText),Weight::SemiBold);
     const char* names[]={"Minimum latency","Balanced","Quality"};
     const char* descriptions[]={"Prioritize response time.","Balance responsiveness and picture quality.","Prioritize picture quality."};
-    const float pitch=std::min(p.s(64),(bottom-row_start-p.s(16))/3);
+    const float row_start=prefs.t+p.s(54);
+    const float pitch=std::min(p.s(62),(prefs.b-row_start-p.s(10))/3);
     for(int i=0;i<3;++i) {
-        const Rect row{x-p.s(6),row_start+pitch*i,inner+p.s(6),row_start+pitch*(i+1)-p.s(4)};
+        const Rect row{prefs.l+p.s(10),row_start+pitch*i,prefs.r-p.s(10),row_start+pitch*(i+1)-p.s(4)};
         const bool selected=static_cast<int>(preset_.load())==i;
         if(p.button(ui_,kActPresetLatency+i,row,"",selected?ButtonStyle::Secondary:ButtonStyle::Ghost)) post_action(kActPresetLatency+i);
-        const float cx=x+p.s(12),cy=row.cy();
-        p.circle(cx,cy,p.s(7),ui::rgb(selected?th::kAccent:th::kText3),false,p.s(1));
-        if(selected) p.circle(cx,cy,p.s(3),ui::rgb(th::kAccent));
-        if(pitch<p.s(48)) {
-            p.text(names[i],{x+p.s(32),row.t,inner,row.b},p.s(13),ui::rgb(th::kText),Weight::Medium);
+        const float cx=x+p.s(8),cy=row.cy();
+        if(selected) {
+            p.circle(cx,cy,p.s(8),ui::rgb(th::kAccent));
+            p.circle(cx,cy,p.s(3),ui::rgb(th::kOnAccent));
         } else {
-            p.text(names[i],{x+p.s(32),row.t+p.s(4),inner,row.cy()+p.s(2)},p.s(13),ui::rgb(th::kText),Weight::Medium);
-            p.text(descriptions[i],{x+p.s(32),row.cy(),inner,row.b-p.s(3)},p.s(12),ui::rgb(th::kText2));
+            p.circle(cx,cy,p.s(7.5f),ui::rgb(th::kBorderStrong),false,p.s(1.5f));
+        }
+        if(pitch<p.s(48)) {
+            p.text(names[i],{x+p.s(28),row.t,inner,row.b},p.s(13),ui::rgb(th::kText),Weight::Medium);
+        } else {
+            p.text(names[i],{x+p.s(28),row.t+p.s(4),inner,row.cy()+p.s(1)},p.s(13.5f),ui::rgb(th::kText),Weight::Medium);
+            p.text(descriptions[i],{x+p.s(28),row.cy()+p.s(1),inner,row.b-p.s(4)},p.s(12),ui::rgb(th::kText2));
         }
     }
-    p.text("Host connection",{sx,top+p.s(18),sr,top+p.s(44)},p.s(15),ui::rgb(th::kText),Weight::SemiBold);
-    p.pill(sx,top+p.s(56),connected?"Connected":to_string(conn),connected?th::kGood:th::kWarn);
-    p.text(host.empty()?"No host configured":host,{sx,top+p.s(96),sr,top+p.s(120)},p.s(13),ui::rgb(th::kText));
-    p.line(sx,top+p.s(140),sr,top+p.s(140),ui::rgb(th::kBorder),p.s(1));
+
+    const Rect hostc{side,top,right,bottom};
+    p.card(hostc);
+    const float sx=hostc.l+p.s(20), sr=hostc.r-p.s(20);
+    p.text("Host connection",{sx,top+p.s(18),sr-p.s(110),top+p.s(44)},p.s(15),ui::rgb(th::kText),Weight::SemiBold);
+    p.pill(sr,top+p.s(19),connected?"Connected":to_string(conn),connected?th::kGood:th::kWarn,true);
+    p.text("Host",{sx,top+p.s(58),sr,top+p.s(76)},p.s(12),ui::rgb(th::kText3));
+    p.text(host.empty()?"No host configured":host,{sx,top+p.s(76),sr,top+p.s(100)},p.s(14),ui::rgb(th::kText),Weight::Medium);
+    p.divider(sx,sr,top+p.s(116));
     const char* labels[]={"Controller bridge","Capture card","HDMI signal","Hardware encoder"};
     const bool checks[]={bool(st.bridge_ok),bool(st.capture_ok),bool(st.signal_ok),bool(st.encoder_ok)};
     const bool can_sleep=have && (st.wake_methods&4) && awake;
     const float check_pitch=p.s(48);
     for(int i=0;i<4;++i) {
-        const float ry=top+p.s(158)+check_pitch*i;
-        p.text(labels[i],{sx,ry,sr-p.s(80),ry+p.s(30)},p.s(13),ui::rgb(th::kText));
-        p.text(!have?"Waiting":checks[i]?"Ready":"Not ready",{sr-p.s(70),ry,sr,ry+p.s(30)},p.s(12),ui::rgb(!have?th::kText3:checks[i]?th::kGood:th::kWarn),Weight::Regular,Align::Trailing);
-        if(i<3) p.line(sx,ry+p.s(40),sr,ry+p.s(40),ui::rgb(th::kBorder,0.4f),p.s(1));
+        const float ry=top+p.s(122)+check_pitch*i, cy=ry+check_pitch/2;
+        p.status_icon(sx+p.s(10),cy,checks[i],!have);
+        p.text(labels[i],{sx+p.s(32),ry,sr-p.s(80),ry+check_pitch},p.s(13),ui::rgb(th::kText));
+        p.text(!have?"Waiting":checks[i]?"Ready":"Not ready",{sr-p.s(80),ry,sr,ry+check_pitch},p.s(12),ui::rgb(!have?th::kText3:checks[i]?th::kGood:th::kWarn),Weight::Medium,Align::Trailing);
+        if(i<3) p.divider(sx+p.s(32),sr,ry+check_pitch);
     }
     if(can_sleep)
-        if(p.button(ui_,kActSleep,{sx,bottom-p.s(54),sr,bottom-p.s(18)},"Put console to sleep")) post_action(kActSleep);
-    p.line(m,r.b-p.s(44),right,r.b-p.s(44),ui::rgb(th::kBorder,0.5f),p.s(1));
-    p.text(!hooks_.preview.empty()?"Offline preview - Sample device status":"Hikari",{m,r.b-p.s(38),right,r.b-p.s(12)},p.s(12),ui::rgb(th::kText3));
+        if(p.button(ui_,kActSleep,{sx,bottom-p.s(56),sr,bottom-p.s(20)},"Put console to sleep")) post_action(kActSleep);
+
+    p.footer_bar(status_bar);
+    const bool preview=!hooks_.preview.empty();
+    p.circle(m+p.s(4),status_bar.cy(),p.s(3),ui::rgb(preview?th::kAccent:connected?th::kGood:th::kText3));
+    p.text(preview?"Offline preview \xC2\xB7 Sample device status":"Hikari",{m+p.s(16),status_bar.t,split,status_bar.b},p.s(12),ui::rgb(th::kText2));
+    // Real lobby shortcuts, right-aligned.
+    {
+        float kx=right-p.text_width("Full screen",p.s(12));
+        p.text("Full screen",{kx,status_bar.t,right,status_bar.b},p.s(12),ui::rgb(th::kText3));
+        kx-=p.s(8)+std::max(p.s(20),p.text_width("F11",p.s(11.5f),Weight::SemiBold)+p.s(12));
+        p.keycap(kx,status_bar.cy()-p.s(1),"F11");
+    }
     // State changes can replace Play with Retry, Settings or Cancel.
     if (std::none_of(ui_.hits.begin(), ui_.hits.end(),
             [this](const auto& hit) { return hit.first == ui_.focus_id; })) {
@@ -808,8 +849,10 @@ void ClientApp::draw_stream_overlay(ui::Painter& p, const Rect& r)
 {
     if (!hooks_.preview.empty()) {
         p.background(r);
-        p.text("Stream preview", {0, r.cy() - p.s(38), r.r, r.cy()}, p.s(30), ui::rgb(th::kText), Weight::SemiBold, Align::Center);
-        p.text("No live video - connect a host to see your game", {0, r.cy() + p.s(8), r.r, r.cy() + p.s(38)}, p.s(15), ui::rgb(th::kText2), Weight::Regular, Align::Center);
+        // Sits below the stats panel so both stay readable.
+        const float cy = std::max(r.cy(), p.s(420));
+        p.text("Stream preview", {0, cy - p.s(38), r.r, cy}, p.s(30), ui::rgb(th::kText), Weight::SemiBold, Align::Center);
+        p.text("No live video - connect a host to see your game", {0, cy + p.s(8), r.r, cy + p.s(38)}, p.s(15), ui::rgb(th::kText2), Weight::Regular, Align::Center);
     }
     std::string toast;
     double until;
@@ -830,7 +873,8 @@ void ClientApp::draw_stream_overlay(ui::Painter& p, const Rect& r)
         const float alpha = static_cast<float>(std::min(1.0, (until - now_s()) * 2));
         const float w = p.text_width(toast, p.s(14), Weight::Medium) + p.s(40);
         const Rect t{r.cx() - w / 2, r.b - p.s(80), r.cx() + w / 2, r.b - p.s(40)};
-        p.fill(t, ui::rgb(0x111216, 0.85f * alpha), p.s(20));
+        p.fill(t, ui::rgb(0x16171A, 0.92f * alpha), p.s(20));
+        p.stroke(t, ui::rgb(0xFFFFFF, 0.08f * alpha), p.s(1), p.s(20));
         p.text(toast, t, p.s(14), ui::rgb(th::kText, alpha), Weight::Medium, Align::Center);
     }
 }
@@ -880,7 +924,8 @@ void ClientApp::draw_stats(ui::Painter& p, const Rect& r)
     const float lh = p.s(21), lw = p.s(118);
     const float w = std::min(r.w() - p.s(32), p.s(700));
     const Rect panel{p.s(16), p.s(16), p.s(16) + w, p.s(16) + lh * rows.size() + p.s(78)};
-    p.fill(panel, ui::rgb(0x0B0C0F, 0.78f), p.s(12));
+    p.fill(panel, ui::rgb(0x0E0F11, 0.84f), p.s(12));
+    p.stroke(panel, ui::rgb(0xFFFFFF, 0.07f), p.s(1), p.s(12));
     float y = panel.t + p.s(10);
     for (auto& [k, v] : rows) {
         p.text(k, Rect{panel.l + p.s(14), y, panel.l + lw, y + lh}, p.s(12.5f), ui::rgb(th::kText2), Weight::Medium);
