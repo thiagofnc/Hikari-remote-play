@@ -2,7 +2,7 @@
   <img src="assets/hikari_logo_mark.png" alt="Hikari logo" width="140">
 </p>
 
-<h1 align="center">Hikari <sub><sup>光</sup></sub></h1>
+<h1 align="center">Hikari <sub></sub></h1>
 
 <p align="center">
   <b>Your Switch 2, anywhere.</b><br>
