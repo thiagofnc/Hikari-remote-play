@@ -36,10 +36,22 @@ else()
     add_link_options(-static)
 endif()
 
+# Release builds pass the tag's version (e.g. 1.2.0) to stamp the binaries.
+set(HIKARI_VERSION_OVERRIDE "" CACHE STRING "Version string to embed instead of PROJECT_VERSION")
+if(HIKARI_VERSION_OVERRIDE)
+    set(HIKARI_VERSION_STRING ${HIKARI_VERSION_OVERRIDE})
+else()
+    set(HIKARI_VERSION_STRING ${PROJECT_VERSION})
+endif()
+
 add_compile_definitions(
     WIN32_LEAN_AND_MEAN NOMINMAX UNICODE _UNICODE
     _WIN32_WINNT=0x0A00 WINVER=0x0A00 NTDDI_VERSION=0x0A000006
-    HIKARI_VERSION="${PROJECT_VERSION}")
+    HIKARI_VERSION="${HIKARI_VERSION_STRING}")
+
+if(HIKARI_WITH_OPUS)
+    include(cmake/Opus.cmake)
+endif()
 
 add_subdirectory(shared)
 add_subdirectory(media)

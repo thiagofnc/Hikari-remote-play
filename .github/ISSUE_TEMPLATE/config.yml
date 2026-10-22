@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Flashing the bridge firmware
+    url: https://github.com/thiagofnc/Hikari-remote-play/blob/main/firmware/esp32-s3/README.md
+    about: Step-by-step flashing and wiring instructions.

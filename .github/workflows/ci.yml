@@ -1,0 +1,244 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # ESP-IDF docker image tag used for the bridge firmware (must be >= 5.3).
+  IDF_VERSION: v5.3.6
+  # llvm-mingw release for the second (clang/MinGW) Windows compiler.
+  LLVM_MINGW_TAG: "20261006"
+
+jobs:
+  windows-msvc:
+    name: Windows / MSVC
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve libopus tag
+        id: opus
+        shell: bash
+        run: |
+          tag=$(sed -nE 's/^set\(HIKARI_OPUS_GIT_TAG "([^"]+)".*/\1/p' cmake/Opus.cmake)
+          echo "tag=${tag:-v1.5.2}" >> "$GITHUB_OUTPUT"
+
+      - name: Cache libopus source
+        id: opus-cache
+        uses: actions/cache@v4
+        with:
+          path: .deps/opus
+          key: opus-src-${{ steps.opus.outputs.tag }}
+
+      - name: Fetch libopus source
+        if: steps.opus-cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: git clone --quiet --depth 1 --branch "${{ steps.opus.outputs.tag }}" https://github.com/xiph/opus.git .deps/opus
+
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Ensure Ninja
+        shell: pwsh
+        run: |
+          if (-not (Get-Command ninja -ErrorAction SilentlyContinue)) { pip install ninja }
+          cmake --version
+          ninja --version
+
+      - name: Configure
+        shell: pwsh
+        run: >
+          cmake -S . -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          -DHIKARI_WITH_OPUS=ON
+          -DHIKARI_BUILD_TESTS=ON
+          -DHIKARI_BUILD_TOOLS=ON
+          "-DFETCHCONTENT_SOURCE_DIR_OPUS=${{ github.workspace }}/.deps/opus"
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure -C Release
+
+      - name: Upload executables
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hikari-win64-msvc
+          path: build/bin/*.exe
+          if-no-files-found: warn
+          retention-days: 14
+
+  windows-clang:
+    name: Windows / clang (llvm-mingw)
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve libopus tag
+        id: opus
+        shell: bash
+        run: |
+          tag=$(sed -nE 's/^set\(HIKARI_OPUS_GIT_TAG "([^"]+)".*/\1/p' cmake/Opus.cmake)
+          echo "tag=${tag:-v1.5.2}" >> "$GITHUB_OUTPUT"
+
+      - name: Cache libopus source
+        id: opus-cache
+        uses: actions/cache@v4
+        with:
+          path: .deps/opus
+          key: opus-src-${{ steps.opus.outputs.tag }}
+
+      - name: Fetch libopus source
+        if: steps.opus-cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: git clone --quiet --depth 1 --branch "${{ steps.opus.outputs.tag }}" https://github.com/xiph/opus.git .deps/opus
+
+      - name: Cache llvm-mingw
+        id: llvm-cache
+        uses: actions/cache@v4
+        with:
+          path: .deps/llvm-mingw
+          key: llvm-mingw-${{ env.LLVM_MINGW_TAG }}-ucrt-x86_64
+
+      - name: Download llvm-mingw
+        if: steps.llvm-cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          $name = "llvm-mingw-$env:LLVM_MINGW_TAG-ucrt-x86_64"
+          $url  = "https://github.com/mstorsjo/llvm-mingw/releases/download/$env:LLVM_MINGW_TAG/$name.zip"
+          New-Item -ItemType Directory -Force .deps | Out-Null
+          Invoke-WebRequest -Uri $url -OutFile "$env:RUNNER_TEMP\llvm-mingw.zip"
+          7z x "$env:RUNNER_TEMP\llvm-mingw.zip" "-o$env:RUNNER_TEMP\llvm-mingw-x" -y | Out-Null
+          Move-Item "$env:RUNNER_TEMP\llvm-mingw-x\$name" .deps/llvm-mingw
+
+      - name: Add toolchain to PATH
+        shell: pwsh
+        run: |
+          "${{ github.workspace }}\.deps\llvm-mingw\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          if (-not (Get-Command ninja -ErrorAction SilentlyContinue)) { pip install ninja }
+
+      - name: Configure
+        shell: pwsh
+        run: >
+          clang --version;
+          cmake -S . -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_C_COMPILER=clang
+          -DCMAKE_CXX_COMPILER=clang++
+          -DHIKARI_WITH_OPUS=ON
+          -DHIKARI_BUILD_TESTS=ON
+          -DHIKARI_BUILD_TOOLS=ON
+          "-DFETCHCONTENT_SOURCE_DIR_OPUS=${{ github.workspace }}/.deps/opus"
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Upload executables
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hikari-win64-clang
+          path: build/bin/*.exe
+          if-no-files-found: warn
+          retention-days: 7
+
+  firmware:
+    name: Firmware / ESP32-S3
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache ESP-IDF managed components
+        uses: actions/cache@v4
+        with:
+          path: firmware/esp32-s3/managed_components
+          key: idf-components-${{ env.IDF_VERSION }}-${{ hashFiles('firmware/esp32-s3/main/idf_component.yml') }}
+          restore-keys: idf-components-${{ env.IDF_VERSION }}-
+
+      # Builds inside the espressif/idf container, then merges bootloader +
+      # partition table + app into one image that flashes at 0x0.
+      # (The action wraps `command` in single quotes: don't use any here.)
+      - name: Build firmware and merged image
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: ${{ env.IDF_VERSION }}
+          target: esp32s3
+          path: firmware/esp32-s3
+          command: >-
+            idf.py build &&
+            cd build &&
+            esptool.py --chip esp32s3 merge_bin -o ../hikari-bridge-esp32s3.bin @flash_args &&
+            ls -l ../hikari-bridge-esp32s3.bin
+
+      - name: Size report
+        run: |
+          ls -l firmware/esp32-s3/build/*.bin firmware/esp32-s3/hikari-bridge-esp32s3.bin
+          sha256sum firmware/esp32-s3/hikari-bridge-esp32s3.bin
+
+      - name: Upload firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: hikari-bridge-esp32s3
+          path: |
+            firmware/esp32-s3/hikari-bridge-esp32s3.bin
+            firmware/esp32-s3/build/hikari_bridge.elf
+            firmware/esp32-s3/build/hikari_bridge.map
+          if-no-files-found: error
+          retention-days: 14
+
+  firmware-link-fuzz:
+    name: Fuzz wired-link parser (60 s)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build libFuzzer harness
+        run: |
+          build() {
+            clang -g -O1 -fsanitize=fuzzer,address,undefined -fno-sanitize-recover=undefined \
+              -I shared/protocol \
+              firmware/esp32-s3/tests/fuzz_link.c shared/protocol/hk_link.c \
+              -o fuzz_link
+          }
+          clang --version
+          if ! build; then
+            # Some runner images ship clang without the libFuzzer runtime.
+            major=$(clang -dumpversion | cut -d. -f1)
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq "libclang-rt-${major}-dev"
+            build
+          fi
+
+      - name: Fuzz
+        run: |
+          mkdir -p corpus artifacts
+          ./fuzz_link -max_total_time=60 -print_final_stats=1 -artifact_prefix=artifacts/ corpus
+
+      - name: Upload crash reproducers
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-link-crashes
+          path: artifacts/
+          if-no-files-found: ignore

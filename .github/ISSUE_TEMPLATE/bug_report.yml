@@ -1,0 +1,43 @@
+name: Bug report
+description: Something doesn't work (streaming, controller bridge, latency, crashes)
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Hikari version
+      description: Shown in the app's title bar / About, or the release you downloaded.
+      placeholder: v0.1.0
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Host (PC connected to the Switch)
+        - Client (PC you play on)
+        - Bridge firmware (ESP32-S3)
+        - Network / latency
+        - Build / CI
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: setup
+    attributes:
+      label: Setup
+      description: Windows version, GPU, capture card, network (wired/Wi-Fi, LAN/internet), ESP32 board.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / telemetry
+      description: Paste relevant log output or attach the telemetry CSV.
+      render: text

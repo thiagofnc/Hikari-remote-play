@@ -16,3 +16,7 @@ firmware/esp32-s3/dependencies.lock
 # Benchmark / telemetry results
 *.csv
 results/
+
+# Packaging / CI caches
+/dist/
+/.deps/
