@@ -10,6 +10,7 @@
 //   Smooth          Present(1, 0) with a frame-latency waitable object and
 //                   max latency 1: even pacing, still no queue build-up.
 
+#include <atomic>
 #include <functional>
 
 #include "hikari/histogram.h"
@@ -34,7 +35,7 @@ public:
 
     // Draws the last video frame (if any) letterboxed, then the 2D layer, then presents.
     // `video` may be null (lobby).
-    void render(ID3D11Texture2D* video, UINT vw, UINT vh, const Draw2D& draw2d, double time_s);
+    void render(ID3D11Texture2D* video, UINT vw, UINT vh, const Draw2D& draw2d, double time_s, bool paced_ui = false);
     // Blocks until the swap chain can accept a frame (Smooth mode pacing).
     void wait_for_slot(DWORD timeout_ms);
 
@@ -53,7 +54,7 @@ private:
     ComPtr<IDXGISwapChain2> swap_;
     HANDLE waitable_ = nullptr;
     bool tearing_ = false;
-    PresentMode mode_ = PresentMode::Balanced;
+    std::atomic<PresentMode> mode_{PresentMode::Balanced};
     UINT width_ = 0, height_ = 0;
     float dpi_scale_ = 1.0f;
 

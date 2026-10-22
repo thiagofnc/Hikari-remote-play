@@ -139,6 +139,9 @@ private:
     uint64_t last_keyframe_req_ = 0;
     bool awaiting_keyframe_ = false;
     std::atomic<uint64_t> keyframe_requests_{0};
+    std::atomic<uint32_t> highest_frame_{0};
+    std::mutex stats_mu_;
+    ClientNetStats published_stats_;
 
     // Report deltas.
     AssemblerStats last_stats_{};

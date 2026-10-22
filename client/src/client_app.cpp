@@ -179,7 +179,7 @@ int ClientApp::run(Config& cfg, ClientHooks hooks)
                      if (b == SwitchInput::A) post_action(kActPlay);
                      if (b == SwitchInput::DpadLeft || b == SwitchInput::DpadRight) {
                          const int dir = b == SwitchInput::DpadLeft ? -1 : 1;
-                         const int cur = static_cast<int>(preset_);
+                         const int cur = static_cast<int>(preset_.load());
                          const int next = std::clamp(cur + dir, 0, 2);
                          if (next != cur) post_action(kActPresetLatency + next);
                      }
@@ -473,6 +473,8 @@ LRESULT ClientApp::handle_message(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     case WM_ERASEBKGND:
         return 1;
     case WM_CLOSE:
+        running_ = false;
+        if (render_.joinable()) render_.join();
         DestroyWindow(hwnd);
         return 0;
     case WM_DESTROY:
@@ -493,9 +495,11 @@ void ClientApp::render_thread()
     if (!renderer_.init(hwnd_, gpu_)) {
         HK_LOGE("Renderer init failed");
         PostMessageW(hwnd_, WM_CLOSE, 0, 0);
+        renderer_.shutdown();
+        CoUninitialize();
         return;
     }
-    ID3D11Texture2D* picture = nullptr;
+    ComPtr<ID3D11Texture2D> picture;
     UINT pic_w = 0, pic_h = 0;
     uint64_t last_render = 0;
     uint64_t next_feedback = 0;
@@ -564,7 +568,7 @@ void ClientApp::render_thread()
         if (streaming) {
             if (fresh || (overlay_live && now - last_render > 50'000)) {
                 if (renderer_.mode() == PresentMode::Smooth) renderer_.wait_for_slot(20);
-                renderer_.render(picture, pic_w, pic_h,
+                renderer_.render(picture.Get(), pic_w, pic_h,
                                  [this](ui::Painter& p, const Rect& r) { draw_stream_overlay(p, r); }, now_s());
                 last_render = now_us();
                 if (fresh) {
@@ -583,11 +587,8 @@ void ClientApp::render_thread()
             }
         } else {
             // Lobby: vsync-paced UI (low CPU), video frames keep decoding behind it.
-            const PresentMode saved = renderer_.mode();
-            renderer_.set_mode(PresentMode::Smooth);
             renderer_.wait_for_slot(20);
-            renderer_.render(nullptr, 0, 0, [this](ui::Painter& p, const Rect& r) { draw_lobby(p, r); }, now_s());
-            renderer_.set_mode(saved);
+            renderer_.render(nullptr, 0, 0, [this](ui::Painter& p, const Rect& r) { draw_lobby(p, r); }, now_s(), true);
         }
 
         if (screenshot_.exchange(false) && picture) {
@@ -601,7 +602,7 @@ void ClientApp::render_thread()
             std::tm tm{};
             localtime_s(&tm, &t);
             wcsftime(name, 64, L"\\Hikari_%Y%m%d_%H%M%S.png", &tm);
-            toast(renderer_.save_screenshot(dir + name, picture, pic_w, pic_h) ? "Screenshot saved to Pictures\\Hikari"
+            toast(renderer_.save_screenshot(dir + name, picture.Get(), pic_w, pic_h) ? "Screenshot saved to Pictures\\Hikari"
                                                                                  : "Screenshot failed");
         }
 
@@ -744,7 +745,7 @@ void ClientApp::draw_lobby(ui::Painter& p, const Rect& r)
     p.fill(seg, ui::rgb(th::kSurface), p.s(12));
     for (int i = 0; i < 3; ++i) {
         const Rect b{seg.l + p.s(4) + segw * i, seg.t + p.s(4), seg.l + p.s(4) + segw * (i + 1), seg.b - p.s(4)};
-        const bool sel = static_cast<int>(preset_) == i;
+        const bool sel = static_cast<int>(preset_.load()) == i;
         ui_.hits.push_back({kActPresetLatency + i, b});
         if (sel) p.fill(b, ui::rgb(th::kSurface2), p.s(9));
         p.text(kPresets[i], b, p.s(13), ui::rgb(sel ? th::kAccent : th::kText2), sel ? Weight::SemiBold : Weight::Medium,

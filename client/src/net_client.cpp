@@ -52,6 +52,7 @@ ClientNet::~ClientNet() { stop(); }
 
 bool ClientNet::start(ClientNetEvents ev)
 {
+    stop();
     ev_ = std::move(ev);
     if (!sock_.open(0, true)) return false;
     running_ = true;
@@ -63,8 +64,8 @@ void ClientNet::stop()
 {
     if (!running_.exchange(false)) return;
     disconnect();
-    sock_.close();
     if (rx_.joinable()) rx_.join();
+    sock_.close();
 }
 
 void ClientNet::set_state(ConnState s, const std::string& detail)
@@ -153,7 +154,7 @@ void ClientNet::power(proto::PowerAction a)
 
 void ClientNet::request_keyframe(uint8_t reason)
 {
-    proto::KeyframeRequest k{assembler_.highest_frame(), reason};
+    proto::KeyframeRequest k{highest_frame_.load(), reason};
     send_sealed(PacketType::KeyframeRequest, [&](ByteWriter& w) { proto::write(w, k); });
     ++keyframe_requests_;
 }
@@ -174,17 +175,12 @@ void ClientNet::set_decode_feedback(uint16_t queue, uint16_t decode_p95_us, doub
 
 ClientNetStats ClientNet::stats()
 {
-    ClientNetStats s;
+    std::lock_guard<std::mutex> lk(stats_mu_);
+    ClientNetStats s = published_stats_;
     s.state = state_.load();
     s.rtt_ms = clock_.last_rtt() / 1000.0;
-    s.jitter_ms = jitter_us_ / 1000.0;
     s.loss_pct = loss_pct_.load();
     s.mbps = mbps_.load();
-    s.queue_delay_ms = last_queue_delay_ / 1000.0;
-    const auto& a = assembler_.stats();
-    s.frames_complete = a.frames_complete;
-    s.frames_dropped = a.frames_dropped;
-    s.frames_fec_recovered = a.frames_fec_recovered;
     s.keyframe_requests = keyframe_requests_.load();
     s.clock_synced = clock_.valid();
     return s;
@@ -212,6 +208,7 @@ void ClientNet::handshake_step(uint64_t now)
         NetAddress a;
         const bool ok = NetAddress::resolve(host, proto::kDefaultPort, a);  // DNS: may block briefly
         lk.lock();
+        if (!want_connect_ || host != host_) return;
         if (!ok) {
             next_resolve_ = now + 2'000'000;
             lk.unlock();
@@ -302,6 +299,7 @@ void ClientNet::handle(const uint8_t* buf, size_t len, const NetAddress& from, u
         if (!proto::read(r, rj)) return;
         {
             std::lock_guard<std::mutex> lk(mu_);
+            if (session_ || !want_connect_ || from != addr_) return;
             want_connect_ = false;
         }
         set_state(ConnState::Rejected, rj.reason == proto::RejectReason::BadVersion ? "different Hikari version"
@@ -313,7 +311,7 @@ void ClientNet::handle(const uint8_t* buf, size_t len, const NetAddress& from, u
         if (!proto::read(r, wel)) return;
         {
             std::lock_guard<std::mutex> lk(mu_);
-            if (session_ || !have_challenge_ || from != addr_) return;
+            if (session_ || !want_connect_ || !have_challenge_ || from != addr_ || !wel.session_id) return;
             const auto want = crypto::welcome_mac(psk_, host_nonce_, client_nonce_);
             if (!crypto::constant_time_equal(want.data(), wel.mac, proto::kMacSize)) return;  // impostor
             session_ = wel.session_id;
@@ -322,6 +320,16 @@ void ClientNet::handle(const uint8_t* buf, size_t len, const NetAddress& from, u
             last_rx_ = now;
         }
         assembler_.reset();
+        frames_.clear([this](std::unique_ptr<AssembledFrame>&& f) { assembler_.recycle(std::move(f)); });
+        last_stats_ = assembler_.stats();
+        last_report_us_ = 0;
+        next_report_ = 0;
+        highest_frame_ = 0;
+        min_transit_[0] = min_transit_[1] = INT64_MAX;
+        min_window_start_ = now;
+        jitter_us_ = 0;
+        last_queue_delay_ = 0;
+        awaiting_keyframe_ = false;
         have_transit_ = false;
         next_ping_ = 0;
         sock_.set_traffic_class(from, TrafficClass::Control);
@@ -337,7 +345,7 @@ void ClientNet::handle(const uint8_t* buf, size_t len, const NetAddress& from, u
     size_t body = len;
     {
         std::lock_guard<std::mutex> lk(mu_);
-        if (!session_ || h.session != session_) return;
+        if (!session_ || h.session != session_ || from != addr_) return;
         if (!is_media(h.type)) {
             body = open_sealed(buf, len, key_);
             if (!body) return;
@@ -434,6 +442,16 @@ void ClientNet::periodic(uint64_t now)
     }
     assembler_.set_reorder_window(reorder_window_us_.load());
     while (auto fr = assembler_.pop(now)) on_frame_ready(std::move(fr), now);
+    highest_frame_ = assembler_.highest_frame();
+    {
+        const auto& a = assembler_.stats();
+        std::lock_guard<std::mutex> lk(stats_mu_);
+        published_stats_.jitter_ms = jitter_us_ / 1000.0;
+        published_stats_.queue_delay_ms = last_queue_delay_ / 1000.0;
+        published_stats_.frames_complete = a.frames_complete;
+        published_stats_.frames_dropped = a.frames_dropped;
+        published_stats_.frames_fec_recovered = a.frames_fec_recovered;
+    }
 
     bool connected;
     {

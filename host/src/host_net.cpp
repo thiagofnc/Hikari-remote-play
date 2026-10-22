@@ -44,9 +44,9 @@ void HostNet::stop()
     if (connected_) {
         send_control(PacketType::Bye, [](ByteWriter&) {});
     }
-    sock_.close();
     if (rx_thread_.joinable()) rx_thread_.join();
     if (tx_thread_.joinable()) tx_thread_.join();
+    sock_.close();
     std::lock_guard<std::mutex> lk(mu_);
     session_.reset();
     connected_ = false;

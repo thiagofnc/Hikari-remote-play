@@ -82,7 +82,7 @@ void AudioPlayer::push(const proto::AudioPacket& p)
 #ifdef HIKARI_WITH_OPUS
         if (opus_ && p.codec == proto::AudioCodec::Opus)
             for (uint32_t i = 0; i < missing; ++i) {
-                const int n = opus_decode(opus_, nullptr, 0, pcm, p.samples, 0);
+                const int n = opus_decode(opus_, nullptr, 0, pcm, std::min<int>(p.samples, 960), 0);
                 if (n > 0) write_samples(pcm, static_cast<size_t>(n));
             }
 #else

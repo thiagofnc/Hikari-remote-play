@@ -192,7 +192,7 @@ bool Renderer::ensure_video_views(ID3D11Texture2D* tex)
     return true;
 }
 
-void Renderer::render(ID3D11Texture2D* video, UINT vw, UINT vh, const Draw2D& draw2d, double time_s)
+void Renderer::render(ID3D11Texture2D* video, UINT vw, UINT vh, const Draw2D& draw2d, double time_s, bool paced_ui)
 {
     if (!swap_ || !rtv_) return;
     auto* ctx = gpu_->context.Get();
@@ -240,7 +240,7 @@ void Renderer::render(ID3D11Texture2D* video, UINT vw, UINT vh, const Draw2D& dr
 
     const uint64_t t0 = now_us();
     UINT interval = 0, flags = 0;
-    switch (mode_) {
+    switch (paced_ui ? PresentMode::Smooth : mode_.load()) {
     case PresentMode::MinimumLatency: flags = tearing_ ? DXGI_PRESENT_ALLOW_TEARING : 0; break;
     case PresentMode::Balanced: break;
     case PresentMode::Smooth: interval = 1; break;

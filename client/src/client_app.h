@@ -102,8 +102,8 @@ private:
     std::string toast_;
     double toast_until_ = 0;
     std::string host_label_;
-    proto::Preset preset_ = proto::Preset::Balanced;
-    uint64_t last_mouse_move_us_ = 0;
+    std::atomic<proto::Preset> preset_{proto::Preset::Balanced};
+    std::atomic<uint64_t> last_mouse_move_us_{0};
     KeyboardState keys_;
 
     // Render-thread statistics.

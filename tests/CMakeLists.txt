@@ -6,3 +6,11 @@ target_link_libraries(hikari_tests PRIVATE hikari_shared)
 target_include_directories(hikari_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_test(NAME hikari_tests COMMAND hikari_tests)
+
+add_executable(hikari_session_tests test_session.cpp)
+target_link_libraries(hikari_session_tests PRIVATE hikari_client hikari_host)
+add_test(NAME hikari_session_tests COMMAND hikari_session_tests)
+set_tests_properties(hikari_session_tests PROPERTIES TIMEOUT 30)
+add_test(NAME hikari_controller_mapping COMMAND hikari_controller_demo --selftest)
+add_test(NAME hikari_app_startup COMMAND Hikari --selftest)
+set_tests_properties(hikari_app_startup PROPERTIES TIMEOUT 15)
