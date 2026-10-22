@@ -295,23 +295,19 @@ void Painter::console(const Rect& r, uint32_t status, bool screen_on, ConsoleMod
         circle(ox+x*u,oy+y*u,radius*u,rgb(color));
     };
     const bool second = model == ConsoleModel::Switch2;
-    const uint32_t ink=0x15171B, cap=second?0x303338:0x353A3F;
-    const uint32_t left=second?0x292D31:0x00B8D2, right=second?0x292D31:0xFF5B54;
+    const uint32_t ink=0x15171B, cap=0x353A3F;
+    const uint32_t left=second?0x444A50:0x00B8D2, right=second?0x444A50:0xFF5B54;
     const Rect jl=box(0,2,13,46), jr=box(87,2,100,46), tablet=box(13,2,87,46);
     fill(jl,rgb(left),u*7);
     fill(box(7,2,13,46),rgb(left));
     fill(jr,rgb(right),u*7);
     fill(box(87,2,93,46),rgb(right));
-    if(second) {
-        stroke(jl,rgb(0x454A50),u*0.45f,u*7);
-        stroke(jr,rgb(0x454A50),u*0.45f,u*7);
-    }
     fill(tablet,rgb(0x101216),u*0.8f);
     stroke(tablet,rgb(0x3A3E44),u*0.45f,u*0.8f);
     const Rect display=box(15,4,85,44);
     fill(display,rgb(screen_on?0x252930:0x090B0D),u*0.5f);
-    // Keep the full mark above the dock lip, rather than obscuring its lower half.
-    if(screen_on) logo(box(37,5,63,31));
+    // The taller dock deliberately covers the lower part of the display-centered mark.
+    if(screen_on) logo(box(37,11,63,37));
 
     const auto stick=[&](float x,float y,uint32_t ring) {
         disk(x,y,3.55f,ink);
@@ -337,10 +333,10 @@ void Painter::console(const Rect& r, uint32_t status, bool screen_on, ConsoleMod
     disk(90.5f,37.8f,1.55f,ink);
     if(second) fill(box(89.1f,42.0f,91.9f,44.8f),rgb(ink),u*0.5f);
 
-    const Rect dock=box(14,32,86,63);
-    fill(dock,rgb(second?0x2B2F34:0x24272E),u*(second?6.0f:2.0f));
-    stroke(dock,rgb(0x42474F),u*0.4f,u*(second?6.0f:2.0f));
-    line(ox+17*u,oy+33*u,ox+83*u,oy+33*u,rgb(0x353A42),u*0.7f);
+    const Rect dock=box(14,23.5f,86,63);
+    fill(dock,rgb(0x24272E),u*2);
+    stroke(dock,rgb(0x42474F),u*0.4f,u*2);
+    line(ox+17*u,oy+24.5f*u,ox+83*u,oy+24.5f*u,rgb(0x353A42),u*0.7f);
     // Flat indicator, without a decorative halo.
     disk(18,58.5f,0.9f,status);
 }

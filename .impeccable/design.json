@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-22T03:15:25.256236+00:00",
+  "generatedAt": "2026-10-22T03:33:51.151141+00:00",
   "title": "Design System: Hikari",
   "extensions": {
     "colorMeta": {
@@ -291,7 +291,7 @@
     "nativeConsole": {
       "source": "ui/ui_kit.cpp Painter::console; ui/hikari/ui_kit.h ConsoleModel; client/src/client_app.cpp draw_lobby; docs/building.md",
       "space": "100 x 64, uniform fit and center",
-      "dock": "(14,32)-(86,63), inside controller rails",
+      "dock": "Both models: (14,23.5)-(86,63), inside controller rails; fill #24272E, corner radius 2 units, lip at y=24.5.",
       "stickCenters": [
         [
           6.8,
@@ -312,12 +312,12 @@
           14.5
         ]
       ],
-      "hikariMark": "(37,5)-(63,31), 26-unit square fully above dock, screen-on only",
-      "variants": "Switch cyan/coral grips; Switch2 graphite grips, cyan/coral stick rings, rounder dock, C button. Blank screen while off. Flat status LED.",
+      "hikariMark": "(37,11)-(63,37), 26-unit square centered in full physical display (15,4)-(85,44), screen-on only; lower portion naturally occluded by dock, not centered in only the exposed area.",
+      "variants": "Switch cyan/coral grips; Switch2 #444A50 graphite grips with the same fill geometry and #353A3F caps as Switch, cyan/coral stick rings and C button. Shared identical taller dock, no extra rounded inner grip outline. Blank screen while off. Flat status LED.",
       "layout": "Session art width clamp(inner width * 0.44,174,300) DIP; text ends 20 DIP before artwork. Progress collapses to current step below 330 DIP text width.",
       "availability": "Switch2 sample via --preview=switch2. Live fallback Switch; no selector or automatic model identification. Generic bridge reports USB readiness only.",
       "controllerBoundary": "Interactive supplied Joy-Con artwork unchanged.",
-      "evidence": "artifacts/ui-review/console/switch.png, switch2.png, compact.png, failed.png, waking.png"
+      "evidence": "Current ui/ui_kit.cpp final dock and centered logo coordinates; validated fresh captures artifacts/ui-review/console/switch.png and artifacts/ui-review/console/switch2.png with corresponding panel crops. Earlier compact/failed/waking captures document unchanged session layout only."
     }
   },
   "components": [
