@@ -1,9 +1,4 @@
-<table>
-  <tr>
-    <td><img src="assets/hikari_logo_mark.png" alt="Hikari logo" width="96"></td>
-    <td><h1>Hikari Remote Play</h1></td>
-  </tr>
-</table>
+<h1 align="center"><img src="assets/hikari_logo_mark.png" alt="Hikari logo" width="96" align="middle">&nbsp;&nbsp;Hikari Remote Play</h1>
 
 <p align="center">
   <b>Your Switch 2, anywhere.</b><br>
