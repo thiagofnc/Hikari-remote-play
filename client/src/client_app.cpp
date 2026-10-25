@@ -318,8 +318,8 @@ void ClientApp::set_screen(Screen s)
 {
     if (screen_.exchange(s) == s) return;
     if (s == Screen::Stream) {
-        toast(mouse_aim_enabled() ? "Stream menu: Ctrl+Alt+M, or hold Minus and Plus     Click  mouse aim"
-                                  : "Stream menu: Ctrl+Alt+M, or hold Minus and Plus",
+        toast(mouse_aim_enabled() ? "Stream menu: Ctrl+Alt+M, or hold Minus and Plus     Controls: Ctrl+Alt+C     Click  mouse aim"
+                                  : "Stream menu: Ctrl+Alt+M, or hold Minus and Plus     Controls: Ctrl+Alt+C",
               5.0);
         last_mouse_move_us_ = now_us();
         ended_by_user_ = false;
@@ -403,9 +403,14 @@ void ClientApp::do_action(int action)
             connect();
         }
         break;
-    case kActController:
+    case kActController: {
+        // Mid-stream the dialog pauses input like the menu does, so nothing stays held on the console.
+        const bool pause = screen_ == Screen::Stream && !menu_open_;
+        if (pause) open_menu(false);
         open_controller_settings();
+        if (pause) close_menu();
         break;
+    }
     case kActChangeRole:
         if (hooks_.change_role && hooks_.change_role(hwnd_)) PostMessageW(hwnd_, WM_CLOSE, 0, 0);
         break;
@@ -524,6 +529,7 @@ void ClientApp::menu_key(UINT vk)
         else if (vk == VK_ESCAPE) activate = menu_confirm_ ? kActEndCancel : kActResume;
         else if (vk == 'M' && ctrl && alt) activate = kActResume;
         else if (vk == 'Q' && ctrl && alt) activate = menu_confirm_ ? kActEndConfirm : kActEndAsk;
+        else if (vk == 'C' && ctrl && alt && !menu_confirm_) activate = kActController;
         else if (vk == VK_F1) activate = kActStats;
         else if (vk == VK_F11) activate = kActFullscreen;
     }
@@ -562,6 +568,10 @@ void ClientApp::on_key(UINT vk, bool down)
     if (down) {
         if (screen_ == Screen::Stream && ctrl && alt && (vk == 'M' || vk == 'Q')) {
             open_menu(vk == 'Q');
+            return;
+        }
+        if (screen_ == Screen::Stream && ctrl && alt && vk == 'C') {
+            post_action(kActController);
             return;
         }
         if (screen_ == Screen::Lobby && (vk == VK_TAB || vk == VK_SPACE || (vk == VK_RETURN && !alt))) {
@@ -1164,6 +1174,7 @@ void ClientApp::draw_stream_menu(ui::Painter& p, const Rect& r)
             const float cy = row.cy() - p.s(1);
             if (id == kActResume) keys(out, cy, {"Esc"});
             else if (id == kActStats) keys(out, cy, {"F1"});
+            else if (id == kActController) keys(out, cy, {"Ctrl", "Alt", "C"});
             else if (id == kActFullscreen) keys(out, cy, {"F11"});
             else if (id == kActEndAsk) keys(out, cy, {"Ctrl", "Alt", "Q"});
             y += row_h;
