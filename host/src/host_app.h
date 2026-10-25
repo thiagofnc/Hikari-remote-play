@@ -145,6 +145,8 @@ private:
     std::atomic<uint16_t> abr_fps_{60};
     std::atomic<uint8_t> abr_fec_{0};
     std::atomic<int> encoder_failures_{0};
+    std::atomic<uint64_t> last_encoded_us_{0};
+    std::atomic<uint64_t> converted_frames_{0};
 
     GpuDevice gpu_;
     std::atomic<bool> gpu_ready_{false};

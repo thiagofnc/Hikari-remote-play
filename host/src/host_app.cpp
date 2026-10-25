@@ -27,6 +27,7 @@ constexpr uint64_t kWakeTimeout = 35'000'000;
 constexpr uint64_t kControllerTimeout = 6'000'000;
 constexpr uint64_t kEncoderWaitTimeout = 45'000'000;
 constexpr uint64_t kClientGrace = 15'000'000;
+constexpr uint64_t kVideoStallTimeout = 10'000'000;
 
 std::string to_hex(const uint8_t* p, size_t n)
 {
@@ -473,6 +474,7 @@ void HostApp::on_captured(CapturedFrame&& f)
     if (converter_.width() && (f.index & 1) && abr_fps_ <= 30) return;  // 30 fps step: every other frame
     ID3D11Texture2D* nv12 = converter_.convert(f.texture.Get(), f.subresource, f.width, f.height);
     if (!nv12) return;
+    converted_frames_.fetch_add(1, std::memory_order_relaxed);
     EncodeJob job;
     job.texture = nv12;
     job.capture_us = f.capture_us;
@@ -485,6 +487,7 @@ void HostApp::on_captured(CapturedFrame&& f)
 void HostApp::on_encoded(EncodedFrame&& f)
 {
     encode_fps_.add();
+    last_encoded_us_.store(now_us(), std::memory_order_relaxed);
     OutgoingFrame o;
     o.frame_id = stream_frame_id_.fetch_add(1) + 1;
     o.keyframe = f.keyframe;
@@ -672,7 +675,13 @@ void HostApp::tick(uint64_t now)
 
     if (stop_requested_.exchange(false)) {
         stop_stream();
-        set_phase(SessionPhase::Lobby, "");
+        // The client leaves its stream view when we fail; keep the reason on screen.
+        bool failed;
+        {
+            std::lock_guard<std::mutex> lk(state_mu_);
+            failed = phase_ == SessionPhase::Failed;
+        }
+        if (!failed) set_phase(SessionPhase::Lobby, "");
     }
     if (manual_wake_.exchange(false) && b.connected)
         bridge_.request_wake(HK_WAKE_USB_REMOTE_WAKEUP | HK_WAKE_HOME_PRESS, press_ms);
@@ -786,6 +795,21 @@ void HostApp::tick(uint64_t now)
         if (encoder_failures_ >= 5) {
             stop_stream();
             set_phase(SessionPhase::Failed, "The video encoder stopped working", HostIssue::NoEncoder);
+            break;
+        }
+        // Audio keeps flowing on its own, so a silent video pipeline would
+        // otherwise leave the client on a spinner with sound and no picture.
+        if (now - std::max(since, last_encoded_us_.load()) > kVideoStallTimeout) {
+            const CaptureStats cs = capture_.stats();
+            HK_LOGE("No video encoded for %llu s (capture %.1f fps, %llu frames, signal %d, converted %llu)",
+                    static_cast<unsigned long long>(kVideoStallTimeout / 1'000'000), cs.fps,
+                    static_cast<unsigned long long>(cs.frames), cs.signal ? 1 : 0,
+                    static_cast<unsigned long long>(converted_frames_.load()));
+            stop_stream();
+            set_phase(SessionPhase::Failed,
+                      cs.fps < 1 ? "The capture card stopped sending video. Check the HDMI cable, then try again."
+                                 : "The host could not encode video. Try again, or restart Hikari on the host.",
+                      cs.fps < 1 ? HostIssue::NoCapture : HostIssue::NoEncoder);
         }
         break;
     case SessionPhase::Lobby:

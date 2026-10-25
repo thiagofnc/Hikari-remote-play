@@ -963,7 +963,8 @@ void ClientApp::draw_lobby(ui::Painter& p, const Rect& r)
             p.text(steps[i],{cx-p.s(8),y+p.s(21),cx+step-p.s(10),y+p.s(40)},p.s(11),ui::rgb(i<=current?th::kText:th::kText3));
         }
         const float message_y=y+p.s(compact_steps?28:42);
-        p.text(st.message[0]?st.message:proto::to_string(st.phase),{x,message_y,text_right,message_y+p.s(30)},p.s(12),ui::rgb(th::kText2),Weight::Regular,Align::Leading,Align::Leading,true);
+        const char* message=st.message[0]?st.message:st.phase==SessionPhase::Streaming?"Waiting for the first picture":proto::to_string(st.phase);
+        p.text(message,{x,message_y,text_right,message_y+p.s(30)},p.s(12),ui::rgb(th::kText2),Weight::Regular,Align::Leading,Align::Leading,true);
         const float cancel_y=y+p.s(compact_steps?64:76);
         if(p.button(ui_,kActStop,{x,cancel_y,x+p.s(88),cancel_y+p.s(34)},"Cancel")) post_action(kActStop);
     } else {
