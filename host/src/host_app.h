@@ -116,6 +116,7 @@ private:
     void setup_thread();
     bool select_encoder();
     bool open_capture();
+    bool recover_gpu();
     void encoder_thread();
     void orchestrator_thread();
     void tick(uint64_t now);
@@ -149,6 +150,7 @@ private:
     std::atomic<uint64_t> converted_frames_{0};
 
     GpuDevice gpu_;
+    std::mutex gpu_mu_;  // device rebuild vs. capture reopen
     std::atomic<bool> gpu_ready_{false};
     std::vector<EncoderInfo> encoders_;
     int encoder_index_ = -1;

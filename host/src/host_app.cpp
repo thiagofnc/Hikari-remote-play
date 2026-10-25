@@ -497,18 +497,73 @@ void HostApp::on_encoded(EncodedFrame&& f)
     net_.send_video(std::move(o));
 }
 
+// A driver update, crash (TDR) or GPU power switch removes the D3D device, and
+// everything made from it fails from then on. Build a fresh device on the same
+// adapter and reopen the capture card on it.
+bool HostApp::recover_gpu()
+{
+    std::lock_guard<std::mutex> g(gpu_mu_);
+    gpu_ready_ = false;
+    if (gpu_.device)
+        HK_LOGW("GPU device lost (%s); recreating it", hresult_string(gpu_.device->GetDeviceRemovedReason()).c_str());
+    encoder_.close();
+    {
+        std::lock_guard<std::mutex> lk(convert_mu_);
+        converter_.reset();
+        converter_ready_ = false;
+    }
+    capture_.close();
+    capture_ok_ = false;
+
+    const std::string encoder_name = encoder_index_ >= 0 ? encoders_[static_cast<size_t>(encoder_index_)].name : cfg_->get("host", "encoder");
+    encoder_index_ = -1;
+    ComPtr<IDXGIAdapter1> same;
+    for (auto& a : enumerate_adapters()) {
+        DXGI_ADAPTER_DESC1 d;
+        a->GetDesc1(&d);
+        if (utf8(d.Description) == gpu_.adapter_name) same = a;
+    }
+    if (!same || !gpu_.create(same.Get())) {
+        HK_LOGE("Could not recreate the GPU device");
+        return false;
+    }
+    const GUID codec = cfg_->get("host", "codec", "h264") == "hevc" ? MFVideoFormat_HEVC : MFVideoFormat_H264;
+    encoders_ = encoders_for(gpu_, codec);
+    for (size_t i = 0; i < encoders_.size(); ++i)
+        if (encoders_[i].name == encoder_name) encoder_index_ = static_cast<int>(i);
+    if (encoder_index_ < 0) {
+        HK_LOGE("Encoder \"%s\" is gone after the GPU reset", encoder_name.c_str());
+        return false;
+    }
+    last_capture_retry_us_ = 0;  // the orchestrator reopens the capture card right away
+    gpu_ready_ = true;
+    wake_.set();
+    return true;
+}
+
 void HostApp::encoder_thread()
 {
     set_thread_role(ThreadRole::Video, "hikari-encoder");
     CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     int failures = 0;
     uint64_t retry_at = 0;
+    bool gpu_lost = false;
+    uint64_t gpu_retry_at = 0;
     while (running_) {
         HANDLE hs[3] = {encode_mailbox_.event(), encoder_.event(), enc_wake_.handle()};
         WaitForMultipleObjects(3, hs, FALSE, 10);
 
+        if ((gpu_ready_ && FAILED(gpu_.device->GetDeviceRemovedReason())) || (gpu_lost && now_us() >= gpu_retry_at)) {
+            gpu_lost = !recover_gpu();
+            failures = 0;
+            encoder_failures_ = gpu_lost ? 5 : 0;
+            if (gpu_lost) gpu_retry_at = now_us() + 5'000'000;  // the driver may still be resetting
+            want_reconfigure_ = true;
+        }
+
         const bool want = streaming_.load() && gpu_ready_.load() && encoder_index_ >= 0;
         if (!want) {
+            failures = 0;
             if (encoder_.is_open()) {
                 encoder_.close();
                 std::lock_guard<std::mutex> lk(convert_mu_);
@@ -586,6 +641,7 @@ void HostApp::encoder_thread()
 bool HostApp::start_stream()
 {
     if (streaming_) return true;
+    encoder_failures_ = 0;  // failures from an earlier Play must not end this one
     streaming_ = true;
     want_reconfigure_ = true;
     capture_.set_upload(true);
@@ -663,9 +719,12 @@ void HostApp::tick(uint64_t now)
 
     // Keep looking for the capture card; recover it if it disappears.
     if (gpu_ready_ && (!capture_ok_ || capture_.failed()) && now - last_capture_retry_us_ > 3'000'000) {
-        last_capture_retry_us_ = now;
-        if (capture_.failed()) HK_LOGW("Capture failed; reopening");
-        open_capture();
+        std::lock_guard<std::mutex> g(gpu_mu_);
+        if (gpu_ready_) {
+            last_capture_retry_us_ = now;
+            if (capture_.failed()) HK_LOGW("Capture failed; reopening");
+            open_capture();
+        }
     }
 
     const BridgeStatus b = bridge_.status();
