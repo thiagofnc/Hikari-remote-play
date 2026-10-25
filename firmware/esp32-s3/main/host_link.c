@@ -12,7 +12,7 @@
 #include "telemetry.h"
 #include "wake.h"
 
-#define FW_VERSION 0x0100
+#define FW_VERSION 0x0101
 #define RX_BUF 1024
 #define TX_BUF 512
 
@@ -53,7 +53,7 @@ static void send_hello_ack(void)
 {
     hk_hello_ack a = {
         .link_version = HK_LINK_VERSION,
-        .profile = HK_PROFILE_HORI_PAD,
+        .profile = console_usb_profile(),
         .fw_version = FW_VERSION,
         .session_id = s_session,
         .usb_state = console_usb_state(),
@@ -103,6 +103,7 @@ static void handle_frame(const hk_link_frame *f, int64_t rx_time)
         if (h.failsafe_timeout_ms >= 20) s_failsafe_ms = h.failsafe_timeout_ms;
         s_last_valid_rx = rx_time;
         send_hello_ack();
+        console_usb_select_profile(h.profile);  // restarts the bridge if the host wants another controller type
         break;
     }
     case HK_LINK_PING: {

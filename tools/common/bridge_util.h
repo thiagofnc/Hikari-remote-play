@@ -64,9 +64,10 @@ inline std::string lat4(const hk_lat4& l)
 
 // Starts the bridge and waits for the HELLO handshake. On failure prints what
 // serial ports exist so the user can tell "not plugged in" from "wrong board".
-inline bool connect_bridge(Bridge& bridge, const std::string& port, uint32_t baud, double timeout_s)
+inline bool connect_bridge(Bridge& bridge, const std::string& port, uint32_t baud, double timeout_s,
+                           uint8_t profile = HK_PROFILE_PRO_CONTROLLER)
 {
-    bridge.start(port, baud);
+    bridge.start(port, baud, profile);
     const uint64_t deadline = now_us() + static_cast<uint64_t>(timeout_s * 1e6);
     while (now_us() < deadline) {
         if (bridge.connected()) return true;

@@ -113,8 +113,9 @@ static void hori_build(const hk_pad_state *s, uint32_t extra, uint8_t *out)
     out[7] = 0;
 }
 
-static void hori_output(const uint8_t *buf, uint16_t len)
+static void hori_output(uint8_t report_id, const uint8_t *buf, uint16_t len)
 {
+    (void)report_id;
     (void)buf;
     (void)len; /* this class has no rumble/LED outputs worth forwarding */
 }

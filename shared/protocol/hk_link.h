@@ -106,7 +106,7 @@ typedef struct hk_hello {
 
 enum hk_profile {
     HK_PROFILE_HORI_PAD = 0, /* wired HORI-style pad, no handshake */
-    HK_PROFILE_PRO_CONTROLLER = 1, /* reserved for future Pro Controller emulation */
+    HK_PROFILE_PRO_CONTROLLER = 1, /* wired Pro Controller with its USB handshake (Switch 2) */
 };
 
 /* USB link state as seen by the device. A suspended bus is the most reliable

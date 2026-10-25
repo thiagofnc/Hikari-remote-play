@@ -145,7 +145,9 @@ bool HostApp::start(Config& cfg)
     cfg.save();
 
     apply_preset(proto::Preset::Balanced, 0);
-    bridge_.start(cfg.get("host", "bridge_port"), static_cast<uint32_t>(cfg.get_int("host", "bridge_baud", HK_LINK_DEFAULT_BAUD)));
+    // The Switch 2 only takes the Pro Controller; "hori" keeps the handshake-free pad for a Switch 1.
+    bridge_.start(cfg.get("host", "bridge_port"), static_cast<uint32_t>(cfg.get_int("host", "bridge_baud", HK_LINK_DEFAULT_BAUD)),
+                  cfg.get("host", "controller_type", "pro") == "hori" ? HK_PROFILE_HORI_PAD : HK_PROFILE_PRO_CONTROLLER);
 
     HostNetEvents ev;
     ev.connected = [this](const std::string&, proto::Preset preset, uint32_t max_kbps) {

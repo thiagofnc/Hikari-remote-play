@@ -37,6 +37,7 @@ struct BridgeStatus {
     bool connected = false;
     std::string port;
     uint16_t fw_version = 0;
+    uint8_t profile = HK_PROFILE_HORI_PAD;  // controller type the bridge presents
     uint8_t usb_state = HK_USB_DETACHED;
     uint8_t wake_methods = 0;
     bool remote_wakeup_enabled = false;
@@ -55,7 +56,8 @@ public:
     Bridge();
     ~Bridge();
 
-    void start(const std::string& preferred_port, uint32_t baud);
+    // profile: hk_profile the bridge should present; it restarts itself to switch.
+    void start(const std::string& preferred_port, uint32_t baud, uint8_t profile);
     void stop();
 
     // Publishes the newest controller state (any thread, never blocks).
@@ -87,6 +89,7 @@ private:
     std::atomic<bool> connected_{false};
     std::string preferred_;
     uint32_t baud_ = HK_LINK_DEFAULT_BAUD;
+    uint8_t profile_ = HK_PROFILE_PRO_CONTROLLER;
 
     void* port_ = nullptr;  // HANDLE
     std::string port_name_;

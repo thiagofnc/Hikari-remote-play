@@ -5,6 +5,7 @@ idf_component_register(
         "pad_store.c"
         "console_usb.c"
         "profile_hori.c"
+        "profile_procon.c"
         "wake.c"
         "telemetry.c"
         "board.c"
@@ -13,7 +14,7 @@ idf_component_register(
         "."
         "${CMAKE_CURRENT_LIST_DIR}/../../../shared/protocol"
     REQUIRES
-        driver esp_timer
+        driver esp_timer nvs_flash
 )
 
 target_compile_options(${COMPONENT_LIB} PRIVATE -Wall -Wextra -Wno-unused-parameter)

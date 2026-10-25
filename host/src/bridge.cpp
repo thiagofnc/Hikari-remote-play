@@ -85,11 +85,12 @@ Bridge::Bridge() : rtt_hist_(5'000'000), write_hist_(2'000'000) {}
 
 Bridge::~Bridge() { stop(); }
 
-void Bridge::start(const std::string& preferred_port, uint32_t baud)
+void Bridge::start(const std::string& preferred_port, uint32_t baud, uint8_t profile)
 {
     stop();
     preferred_ = preferred_port;
     baud_ = baud ? baud : HK_LINK_DEFAULT_BAUD;
+    profile_ = profile;
     running_ = true;
     thread_ = std::thread(&Bridge::run, this);
 }
@@ -221,7 +222,7 @@ bool Bridge::write_frame(uint8_t type, const uint8_t* payload, size_t len, bool 
 bool Bridge::handshake()
 {
     session_ = crypto::random_u32() | 1;
-    hk_hello h{session_, 250, HK_PROFILE_HORI_PAD};
+    hk_hello h{session_, 250, profile_};
     uint8_t buf[16];
     const size_t n = hk_hello_encode(&h, buf);
 
@@ -253,6 +254,7 @@ bool Bridge::handshake()
                     a.session_id == session_) {
                     std::lock_guard<std::mutex> lk(status_mu_);
                     status_.fw_version = a.fw_version;
+                    status_.profile = a.profile;
                     status_.usb_state = a.usb_state;
                     status_.wake_methods = a.wake_methods;
                     status_.remote_wakeup_enabled = a.remote_wakeup_enabled != 0;
@@ -494,12 +496,19 @@ void Bridge::run()
                 }
                 connected_ = true;
                 BridgeStatus st = status();
-                HK_LOGI("Controller bridge on %s (fw %u.%u, console USB %s, wake methods 0x%02x)", port.c_str(),
+                HK_LOGI("Controller bridge on %s (fw %u.%u, %s, console USB %s, wake methods 0x%02x)", port.c_str(),
                         st.fw_version >> 8, st.fw_version & 0xFF,
+                        st.profile == HK_PROFILE_PRO_CONTROLLER ? "Pro Controller" : "HORI pad",
                         st.usb_state == HK_USB_ACTIVE      ? "active"
                         : st.usb_state == HK_USB_SUSPENDED ? "suspended"
                                                            : "detached",
                         st.wake_methods);
+                // Firmware 1.0 predates profile switching and stays a HORI pad.
+                if (st.profile != profile_ && st.fw_version < 0x0101)
+                    HK_LOGW("Bridge firmware %u.%u cannot act as a Pro Controller; flash the latest hikari-bridge-esp32s3.bin",
+                            st.fw_version >> 8, st.fw_version & 0xFF);
+                else if (st.profile != profile_)
+                    HK_LOGI("Bridge restarting to switch controller type");
                 session_loop();
                 HK_LOGW("Controller bridge on %s disconnected", port.c_str());
             }

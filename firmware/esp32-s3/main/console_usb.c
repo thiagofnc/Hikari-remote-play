@@ -4,9 +4,12 @@
 
 #include "board.h"
 #include "console_profile.h"
+#include "esp_system.h"
 #include "esp_timer.h"
 #include "hk_link.h"
 #include "host_link.h"
+#include "nvs.h"
+#include "nvs_flash.h"
 #include "pad_store.h"
 #include "sdkconfig.h"
 #include "telemetry.h"
@@ -32,6 +35,41 @@ uint8_t console_usb_state(void)
 
 bool console_usb_remote_wakeup_enabled(void) { return s_remote_wakeup_en; }
 
+uint8_t console_usb_profile(void) { return s_profile->id; }
+
+/* ---- profile choice ---------------------------------------------------------
+ * USB descriptors are fixed once the stack starts, so the host's choice is
+ * stored in NVS and applied by restarting the bridge. */
+
+static const console_profile *profile_for(uint8_t id)
+{
+    return id == HK_PROFILE_PRO_CONTROLLER ? &g_profile_procon : id == HK_PROFILE_HORI_PAD ? &g_profile_hori : NULL;
+}
+
+static uint8_t load_profile(void)
+{
+    uint8_t id = HK_PROFILE_HORI_PAD;
+    nvs_handle_t h;
+    if (nvs_open("hikari", NVS_READONLY, &h) == ESP_OK) {
+        nvs_get_u8(h, "profile", &id);
+        nvs_close(h);
+    }
+    return id;
+}
+
+void console_usb_select_profile(uint8_t id)
+{
+    if (id == s_profile->id || !profile_for(id)) return;
+    nvs_handle_t h;
+    if (nvs_open("hikari", NVS_READWRITE, &h) != ESP_OK) return;
+    const bool saved = nvs_set_u8(h, "profile", id) == ESP_OK && nvs_commit(h) == ESP_OK;
+    nvs_close(h);
+    // Only restart once the choice is really stored, or a failing flash would reboot forever.
+    if (!saved || load_profile() != id) return;
+    vTaskDelay(pdMS_TO_TICKS(50));  // let the HELLO_ACK leave the UART
+    esp_restart();
+}
+
 bool console_usb_remote_wakeup(void)
 {
     if (!s_mounted || !s_suspended || !s_remote_wakeup_en) return false;
@@ -44,6 +82,7 @@ static void notify_state(void) { host_link_send_event(HK_EVENT_USB_STATE, consol
 
 void tud_mount_cb(void)
 {
+    if (s_profile->reset) s_profile->reset();
     s_mounted = true;
     s_suspended = false;
     board_status_led(true);
@@ -94,7 +133,8 @@ uint16_t tud_hid_get_report_cb(uint8_t instance, uint8_t report_id, hid_report_t
 void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id, hid_report_type_t type, uint8_t const *buffer,
                            uint16_t bufsize)
 {
-    s_profile->on_output(buffer, bufsize);
+    s_profile->on_output(report_id, buffer, bufsize);
+    if (s_task) xTaskNotifyGive(s_task);  // a handshake reply may be waiting
 }
 
 // The console just read our report off the bus: this is the moment the input
@@ -146,6 +186,17 @@ static void report_task(void *arg)
         pad_snapshot snap;
         pad_store_read(&snap);
         const uint32_t injected = pad_store_injected_buttons();
+
+        // Handshake replies go first; the console waits on each one.
+        if (s_profile->take_reply && s_profile->take_reply(&snap.state, injected, report)) {
+            s_inflight_valid = false;
+            if (tud_hid_report(0, report, s_profile->report_len)) g_counters.usb_reports++;
+            else g_counters.usb_fail++;
+            xTaskNotifyGive(xTaskGetCurrentTaskHandle());  // more replies may be queued
+            continue;
+        }
+        if (s_profile->streaming && !s_profile->streaming()) continue;
+
         const bool changed = snap.generation != sent_generation || injected != sent_injected;
         const bool due = (now - last_send_us) >= (int64_t)CONFIG_HIKARI_KEEPALIVE_REPORT_MS * 1000;
         if (!changed && !due) continue;
@@ -175,6 +226,14 @@ static void report_task(void *arg)
 
 TaskHandle_t console_usb_init(void)
 {
+    if (nvs_flash_init() != ESP_OK) {
+        nvs_flash_erase();
+        nvs_flash_init();
+    }
+    const console_profile *p = profile_for(load_profile());
+    if (p) s_profile = p;
+    if (s_profile->reset) s_profile->reset();
+
     // Report task first so callbacks can notify it from the start. Pinned to
     // core 1 next to host RX; TinyUSB's own task lives on core 0.
     xTaskCreatePinnedToCore(report_task, "usb_report", 4096, NULL, configMAX_PRIORITIES - 1, &s_task, 1);
