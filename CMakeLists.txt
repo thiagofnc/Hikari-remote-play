@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 project(Hikari
-    VERSION 0.1.2
+    VERSION 0.1.3
     DESCRIPTION "Low-latency Nintendo Switch 2 remote play"
     LANGUAGES C CXX)
 
