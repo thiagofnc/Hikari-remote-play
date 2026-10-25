@@ -29,6 +29,9 @@ constexpr uint64_t kEncoderWaitTimeout = 45'000'000;
 constexpr uint64_t kClientGrace = 15'000'000;
 constexpr uint64_t kVideoStallTimeout = 10'000'000;
 
+// Other threads stamp times after a tick reads `now`; a later stamp is "just happened", not an unsigned wraparound.
+uint64_t elapsed_since(uint64_t now, uint64_t t) { return now > t ? now - t : 0; }
+
 std::string to_hex(const uint8_t* p, size_t n)
 {
     static const char* d = "0123456789abcdef";
@@ -767,7 +770,7 @@ void HostApp::tick(uint64_t now)
         }
     }
 
-    if (client_gone_at_ && now - client_gone_at_ > kClientGrace) {
+    if (client_gone_at_ && elapsed_since(now, client_gone_at_) > kClientGrace) {
         client_gone_at_ = 0;
         stop_stream();
         set_phase(SessionPhase::Lobby, "");
@@ -856,7 +859,7 @@ void HostApp::tick(uint64_t now)
         }
         // Audio keeps flowing on its own, so a silent video pipeline would
         // otherwise leave the client on a spinner with sound and no picture.
-        if (now - std::max(since, last_encoded_us_.load()) > kVideoStallTimeout) {
+        if (elapsed_since(now, std::max(since, last_encoded_us_.load())) > kVideoStallTimeout) {
             const CaptureStats cs = capture_.stats();
             HK_LOGE("No video encoded for %llu s (capture %.1f fps, %llu frames, signal %d, converted %llu)",
                     static_cast<unsigned long long>(kVideoStallTimeout / 1'000'000), cs.fps,
