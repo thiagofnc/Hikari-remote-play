@@ -717,8 +717,10 @@ int run(const std::vector<std::string>& args)
             next_role = chooser.role;
             return true;
         };
-        log::init(role.c_str());
-        HK_LOGI("Hikari %s starting as %s", HIKARI_VERSION, role.c_str());
+        const auto start_log = [&] {
+            log::init(role.c_str());
+            HK_LOGI("Hikari %s starting as %s", HIKARI_VERSION, role.c_str());
+        };
         int result = 0;
         if (role == "host") {
             // Closing the window only hides the host to the tray, so a second launch would
@@ -739,6 +741,7 @@ int run(const std::vector<std::string>& args)
                     if (h) CloseHandle(h);
                 }
             } guard{instance};
+            start_log();  // only now: a second launch must not rotate the running host's log
             HostApp host;
             if (!host.start(cfg)) {
                 MessageBoxW(nullptr, L"The host could not start. Check the Hikari logs for details.", L"Hikari", MB_ICONERROR);
@@ -752,6 +755,7 @@ int run(const std::vector<std::string>& args)
             host.stop();
             cfg.save();
         } else {
+            start_log();
             ClientApp client;
             ClientHooks hooks;
             hooks.open_settings = [&cfg](HWND owner) { return client_settings(owner, cfg); };
