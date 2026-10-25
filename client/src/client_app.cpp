@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <ctime>
 
 #include "controller_settings.h"
@@ -209,6 +210,10 @@ int ClientApp::run(Config& cfg, ClientHooks hooks)
         // The host left the stream (Stop, failure): fall back to the lobby.
         if (have_status_ && status_.phase == SessionPhase::Streaming && s.phase != SessionPhase::Streaming)
             PostMessageW(hwnd_, WM_HIKARI_ACTION, kActStop, 0);
+        // Keep the host's side of the story in this log too; the host log is on another PC.
+        if (!have_status_ || s.phase != status_.phase || s.issue != status_.issue || std::strcmp(s.message, status_.message) != 0)
+            HK_LOGI("Host: %s%s%s%s%s", proto::to_string(s.phase), s.message[0] ? " - " : "", s.message,
+                    s.issue != proto::HostIssue::None ? " | " : "", s.issue != proto::HostIssue::None ? proto::to_string(s.issue) : "");
         status_ = s;
         have_status_ = true;
     };
