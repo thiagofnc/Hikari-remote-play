@@ -24,6 +24,7 @@ public:
 
 private:
     bool ensure_processor(UINT src_w, UINT src_h, DXGI_FORMAT fmt);
+    ID3D11VideoProcessorInputView* bounce_view(ID3D11Texture2D* src, UINT sub, const D3D11_TEXTURE2D_DESC& d);
 
     GpuDevice* gpu_ = nullptr;
     ComPtr<ID3D11VideoDevice> vdev_;
@@ -43,6 +44,14 @@ private:
         bool operator<(const InKey& o) const { return tex != o.tex ? tex < o.tex : sub < o.sub; }
     };
     std::map<InKey, ComPtr<ID3D11VideoProcessorInputView>> in_views_;
+
+    // Some drivers (Intel) refuse input views on textures they can't sample
+    // from the video engine, e.g. YUY2 created with only BIND_SHADER_RESOURCE.
+    // Those frames are copied into a texture the processor accepts first.
+    bool use_bounce_ = false;
+    bool bounce_failed_ = false;
+    ComPtr<ID3D11Texture2D> bounce_;
+    ComPtr<ID3D11VideoProcessorInputView> bounce_in_view_;
 };
 
 }  // namespace hikari

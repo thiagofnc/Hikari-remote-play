@@ -37,6 +37,9 @@ void GpuConverter::reset()
     for (auto& v : ring_views_) v.Reset();
     for (auto& t : ring_) t.Reset();
     in_views_.clear();
+    bounce_in_view_.Reset();
+    bounce_.Reset();
+    use_bounce_ = bounce_failed_ = false;
     vproc_.Reset();
     venum_.Reset();
     vctx_.Reset();
@@ -52,6 +55,9 @@ bool GpuConverter::ensure_processor(UINT src_w, UINT src_h, DXGI_FORMAT fmt)
     vproc_.Reset();
     venum_.Reset();
     in_views_.clear();
+    bounce_in_view_.Reset();
+    bounce_.Reset();
+    use_bounce_ = bounce_failed_ = false;
     for (auto& v : ring_views_) v.Reset();
 
     D3D11_VIDEO_PROCESSOR_CONTENT_DESC cd{};
@@ -103,27 +109,75 @@ bool GpuConverter::ensure_processor(UINT src_w, UINT src_h, DXGI_FORMAT fmt)
     return true;
 }
 
+ID3D11VideoProcessorInputView* GpuConverter::bounce_view(ID3D11Texture2D* src, UINT sub, const D3D11_TEXTURE2D_DESC& d)
+{
+    if (bounce_failed_) return nullptr;
+    if (!bounce_) {
+        // Plain DEFAULT textures and decoder surfaces are accepted by every
+        // driver we have seen; try them in that order.
+        for (const UINT bind : {0u, static_cast<UINT>(D3D11_BIND_DECODER), static_cast<UINT>(D3D11_BIND_RENDER_TARGET)}) {
+            D3D11_TEXTURE2D_DESC bd{};
+            bd.Width = d.Width;
+            bd.Height = d.Height;
+            bd.MipLevels = 1;
+            bd.ArraySize = 1;
+            bd.Format = d.Format;
+            bd.SampleDesc.Count = 1;
+            bd.Usage = D3D11_USAGE_DEFAULT;
+            bd.BindFlags = bind;
+            ComPtr<ID3D11Texture2D> t;
+            if (FAILED(gpu_->device->CreateTexture2D(&bd, nullptr, &t))) continue;
+            D3D11_VIDEO_PROCESSOR_INPUT_VIEW_DESC id{};
+            id.ViewDimension = D3D11_VPIV_DIMENSION_TEXTURE2D;
+            ComPtr<ID3D11VideoProcessorInputView> v;
+            if (FAILED(vdev_->CreateVideoProcessorInputView(t.Get(), venum_.Get(), &id, &v))) continue;
+            bounce_ = t;
+            bounce_in_view_ = v;
+            break;
+        }
+        if (!bounce_) {
+            HK_LOGE("The video processor accepts no texture of format %d; cannot convert capture frames", d.Format);
+            bounce_failed_ = true;
+            return nullptr;
+        }
+    }
+    gpu_->context->CopySubresourceRegion(bounce_.Get(), 0, 0, 0, 0, src, sub, nullptr);
+    return bounce_in_view_.Get();
+}
+
 ID3D11Texture2D* GpuConverter::convert(ID3D11Texture2D* src, UINT sub, UINT src_w, UINT src_h)
 {
     D3D11_TEXTURE2D_DESC d;
     src->GetDesc(&d);
     if (!ensure_processor(src_w, src_h, d.Format)) return nullptr;
 
-    const InKey key{src, sub};
-    auto it = in_views_.find(key);
-    if (it == in_views_.end()) {
-        if (in_views_.size() > 64) in_views_.clear();  // capture pools rotate; keep the cache bounded
-        ComPtr<ID3D11VideoProcessorInputView> v;
-        D3D11_VIDEO_PROCESSOR_INPUT_VIEW_DESC id{};
-        id.ViewDimension = D3D11_VPIV_DIMENSION_TEXTURE2D;
-        id.Texture2D.ArraySlice = sub;
-        if (FAILED(vdev_->CreateVideoProcessorInputView(src, venum_.Get(), &id, &v))) {
-            HK_LOGE("CreateVideoProcessorInputView failed (format %d)", d.Format);
-            return nullptr;
+    ID3D11VideoProcessorInputView* in_view = nullptr;
+    if (use_bounce_) {
+        in_view = bounce_view(src, sub, d);
+    } else {
+        const InKey key{src, sub};
+        auto it = in_views_.find(key);
+        if (it == in_views_.end()) {
+            if (in_views_.size() > 64) in_views_.clear();  // capture pools rotate; keep the cache bounded
+            ComPtr<ID3D11VideoProcessorInputView> v;
+            D3D11_VIDEO_PROCESSOR_INPUT_VIEW_DESC id{};
+            id.ViewDimension = D3D11_VPIV_DIMENSION_TEXTURE2D;
+            id.Texture2D.ArraySlice = sub;
+            const HRESULT hr = vdev_->CreateVideoProcessorInputView(src, venum_.Get(), &id, &v);
+            if (FAILED(hr)) {
+                HK_LOGI("Capture texture (format %d, bind 0x%x) not accepted by the video processor (%s); "
+                        "copying frames through a compatible texture",
+                        d.Format, d.BindFlags, hresult_string(hr).c_str());
+                use_bounce_ = true;
+                in_views_.clear();
+                in_view = bounce_view(src, sub, d);
+            } else {
+                it = in_views_.emplace(key, v).first;
+            }
         }
-        it = in_views_.emplace(key, v).first;
+        if (!use_bounce_) in_view = it->second.Get();
     }
-    auto* in_view = it->second.Get();
+    if (!in_view) return nullptr;
 
     const int i = next_;
     next_ = (next_ + 1) % kRing;
