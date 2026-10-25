@@ -721,6 +721,24 @@ int run(const std::vector<std::string>& args)
         HK_LOGI("Hikari %s starting as %s", HIKARI_VERSION, role.c_str());
         int result = 0;
         if (role == "host") {
+            // Closing the window only hides the host to the tray, so a second launch would
+            // fail to bind the port. Bring the running host back instead.
+            HANDLE instance = CreateMutexW(nullptr, TRUE, L"Local\\HikariHost");
+            if (instance && GetLastError() == ERROR_ALREADY_EXISTS) {
+                CloseHandle(instance);
+                if (HWND existing = FindWindowW(L"HikariWindow", L"Hikari Host"); existing && !minimized) {
+                    ShowWindow(existing, SW_RESTORE);
+                    SetForegroundWindow(existing);
+                }
+                return 0;
+            }
+            struct InstanceGuard {
+                HANDLE h;
+                ~InstanceGuard()
+                {
+                    if (h) CloseHandle(h);
+                }
+            } guard{instance};
             HostApp host;
             if (!host.start(cfg)) {
                 MessageBoxW(nullptr, L"The host could not start. Check the Hikari logs for details.", L"Hikari", MB_ICONERROR);
