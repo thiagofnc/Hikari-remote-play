@@ -404,17 +404,15 @@ bool HostApp::open_capture()
     const CaptureDeviceInfo* pick = nullptr;
     int best = -1000;
     for (const auto& d : devs) {
-        if (!want.empty() && d.name == want) {
-            pick = &d;
-            break;
-        }
-        const int s = capture_device_score(d);
+        // The remembered device only breaks ties: an earlier run may have
+        // saved a webcam while the capture card was unplugged.
+        const int s = capture_device_score(d) + (!want.empty() && d.name == want ? 25 : 0);
         if (s > best) {
             best = s;
             pick = &d;
         }
     }
-    if (!pick || (want.empty() && best < 0)) {
+    if (!pick || best < 0) {
         capture_ok_ = false;
         return false;
     }

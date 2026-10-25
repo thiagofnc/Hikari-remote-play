@@ -28,6 +28,9 @@ struct AudioEndpointInfo {
 std::vector<AudioEndpointInfo> enumerate_audio_capture_endpoints();
 // Container ID of a video capture device (from its MF symbolic link).
 bool container_id_for_symlink(const std::wstring& symlink, GUID& out);
+// True for the container Windows gives every device built into the PC
+// (webcam, microphone array, ...). Capture cards are always external.
+bool is_builtin_container(const GUID& container);
 // Returns the index of the endpoint belonging to the capture card, or -1.
 int match_audio_endpoint(const std::vector<AudioEndpointInfo>& eps, const std::wstring& video_symlink,
                          const std::string& video_name);

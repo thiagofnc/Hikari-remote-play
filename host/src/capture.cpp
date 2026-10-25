@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <cstring>
 
+#include "audio_capture.h"
 #include "hikari/clock.h"
 #include "hikari/log.h"
 #include "hikari/system.h"
@@ -147,8 +148,11 @@ int capture_device_score(const CaptureDeviceInfo& dev)
     for (const char* kw : {"capture", "hdmi", "cam link", "elgato", "avermedia", "live gamer", "usb3", "ugreen",
                            "video", "uvc", "ezcap", "razer ripsaw", "magewell", "game"})
         if (n.find(kw) != std::string::npos) score += 10;
-    for (const char* kw : {"integrated", "webcam", "facetime", "ir camera", "front", "rear", "virtual", "obs"})
+    for (const char* kw : {"integrated", "webcam", "camera", "facetime", "front", "rear", "virtual", "obs"})
         if (n.find(kw) != std::string::npos) score -= 50;
+    // Built into the PC: a laptop camera, never a capture card.
+    GUID container{};
+    if (container_id_for_symlink(dev.symlink, container) && is_builtin_container(container)) score -= 100;
     for (const auto& m : dev.modes)
         if (m.width >= 1920 && m.height >= 1080 && m.fps() >= 59) {
             score += 30;

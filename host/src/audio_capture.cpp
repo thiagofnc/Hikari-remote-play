@@ -85,11 +85,20 @@ bool container_id_for_symlink(const std::wstring& symlink, GUID& out)
            CR_SUCCESS;
 }
 
+bool is_builtin_container(const GUID& container)
+{
+    static const GUID kBuiltin = {0x00000000, 0x0000, 0x0000, {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}};
+    return IsEqualGUID(container, kBuiltin);
+}
+
 int match_audio_endpoint(const std::vector<AudioEndpointInfo>& eps, const std::wstring& video_symlink,
                          const std::string& video_name)
 {
+    // Built-in devices all share one container, so matching on it would pair
+    // a built-in camera with the laptop microphone.
     GUID container{};
-    if (!video_symlink.empty() && container_id_for_symlink(video_symlink, container)) {
+    if (!video_symlink.empty() && container_id_for_symlink(video_symlink, container) &&
+        !is_builtin_container(container)) {
         for (size_t i = 0; i < eps.size(); ++i)
             if (IsEqualGUID(eps[i].container, container)) return static_cast<int>(i);
     }
