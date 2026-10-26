@@ -15,6 +15,7 @@
 
 <p align="center">
   <a href="https://github.com/thiagofnc/Hikari-remote-play/releases/latest"><img alt="Download for Windows" src="https://img.shields.io/badge/Download_for_Windows-FBBB04?style=for-the-badge&logo=windows&logoColor=1A1A1A"></a>
+  <a href="https://github.com/thiagofnc/Hikari-remote-play/releases/latest/download/Hikari.apk"><img alt="Download for Android" src="https://img.shields.io/badge/Download_for_Android-FBBB04?style=for-the-badge&logo=android&logoColor=1A1A1A"></a>
   <br>
   <a href="docs/hardware-setup.md#2-flash-the-bridge-firmware"><img alt="Flash the bridge firmware" src="https://img.shields.io/badge/Flash_the_bridge_firmware-2B2B2B?style=flat&logo=espressif&logoColor=FBBB04"></a>
 </p>
@@ -140,6 +141,7 @@ For Internet play, use **Set up Tailscale** on the host and **Install Tailscale*
 | **2 USB cables** | One from the board's **USB** port to the dock, one from its **UART** port to the Host PC. Match your board revision (micro-USB or USB-C). |
 | **HDMI cable** | Dock → capture card. |
 | **Client PC** (where you play) | Windows 10/11 with hardware video decode (any GPU from the last decade). Wired or 5 GHz Wi-Fi. |
+| *Or:* **Android phone/tablet** | Android 8.0+. Install [`Hikari.apk`](https://github.com/thiagofnc/Hikari-remote-play/releases/latest/download/Hikari.apk) and paste the host's invite. Play with the transparent on-screen controls or a Bluetooth controller. |
 | *Optional:* PC817 optocoupler + 330 Ω resistor | Hardware power-button fallback for remote wake. See [remote wake](docs/remote-wake.md). |
 
 ## How it stays fast
