@@ -1,5 +1,6 @@
 package com.hikari.remoteplay.net
 
+import android.os.Looper
 import android.util.Log
 import com.hikari.remoteplay.proto.AudioPacket
 import com.hikari.remoteplay.proto.ByeReason
@@ -33,6 +34,7 @@ import java.nio.channels.DatagramChannel
 import java.nio.channels.SelectionKey
 import java.nio.channels.Selector
 import java.util.concurrent.ArrayBlockingQueue
+import java.util.concurrent.Executors
 import kotlin.math.abs
 
 // Client network endpoint, a port of client/src/net_client.cpp.
@@ -79,6 +81,7 @@ class HikariClient(private val clientName: String, private val displayHz: Int, p
 
     @Volatile var listener: ClientNetListener? = null
 
+    private val control = Executors.newSingleThreadExecutor { Thread(it, "hikari-net-tx") }
     private var channel: DatagramChannel? = null
     private var selector: Selector? = null
     private var rx: Thread? = null
@@ -219,19 +222,31 @@ class HikariClient(private val clientName: String, private val displayHz: Int, p
         setState(ConnState.Idle)
     }
 
+    // Seals under the session lock, then sends. Android forbids network I/O on the
+    // main thread (the send would throw), so packets built there go out on `control`.
     private fun sendSealed(type: Int, body: (ByteWriter) -> Unit) {
         val ch = channel ?: return
         val buf = ByteArray(Proto.MAX_DATAGRAM)
+        val n: Int
+        val a: InetSocketAddress
         synchronized(lock) {
             val s = sealer ?: return
-            val a = addr ?: return
+            a = addr ?: return
             if (session == 0) return
             val w = ByteWriter(buf)
             writeHeader(w, type, session)
             body(w)
-            val n = s.seal(w)
-            if (n > 0) runCatching { ch.send(ByteBuffer.wrap(buf, 0, n), a) }
+            n = s.seal(w)
         }
+        if (n <= 0) return
+        val send = {
+            try {
+                ch.send(ByteBuffer.wrap(buf, 0, n), a)
+            } catch (e: Exception) {
+                Log.w(TAG, "send type $type", e)
+            }
+        }
+        if (Looper.myLooper() == Looper.getMainLooper()) control.execute { send() } else send()
     }
 
     fun sendInput(input: Input) {
