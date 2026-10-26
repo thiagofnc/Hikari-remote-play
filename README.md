@@ -70,7 +70,7 @@ flowchart LR
     </td>
     <td width="33%" valign="top">
       <h4>🌙 Wakes your Switch</h4>
-      Press <b>Play</b>. Hikari wakes the console with USB remote wakeup and a HOME press. An optional power-button circuit handles the rest.
+      Press <b>Play</b>. Hikari wakes the sleeping console over Bluetooth, the same way your Joy-Con 2 does. No extra hardware.
     </td>
   </tr>
   <tr>
@@ -165,12 +165,13 @@ Want the details? See the [architecture](docs/architecture.md), the [wire protoc
 
 Click **Play** while the console is asleep and the host runs an escalating chain:
 
-1. **USB remote wakeup.** The bridge signals resume on the bus, if the console armed that feature before sleeping.
-2. **HOME press.** Sent once the bus is active again, to bring the picture back.
-3. **Power button** *(optional hardware)*. An ESP32 GPIO drives an optocoupler across the power button. Pulses are capped at 5 s, so the bridge can never force a hard power-off.
+1. **Bluetooth wake beacon.** The bridge broadcasts the wake signal of your Joy-Con 2, which it learns the first time you wake the console with that Joy-Con. This is what wakes a sleeping Switch 2.
+2. **USB remote wakeup.** The bridge signals resume on the bus, if the console armed that feature before sleeping (the Switch 2 doesn't).
+3. **HOME press.** Sent once the console takes input again, to bring the picture back.
+4. **Power button** *(optional hardware)*. An ESP32 GPIO drives an optocoupler across the power button. Pulses are capped at 5 s, so the bridge can never force a hard power-off.
 
 > [!NOTE]
-> We don't know yet whether the Switch 2 arms USB remote wakeup for a wired pad. Hikari **detects and reports it** for your console. [`docs/remote-wake.md`](docs/remote-wake.md) explains how to check (`hikari-pad status`) and how to fit the fallback.
+> **One-time setup:** detach a Joy-Con 2, put the Switch to sleep, and press HOME on the Joy-Con near the bridge. From then on, Play wakes the console by itself. [`docs/remote-wake.md`](docs/remote-wake.md) explains how it works.
 
 ## Controls & hotkeys
 

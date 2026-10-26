@@ -97,7 +97,7 @@ The D-pad becomes a hat (0 = up, clockwise, 8 = centred). Opposite directions pr
 | 2 | u16 | `fw_version` (major << 8 \| minor) |
 | 4 | u32 | `session_id` (echo) |
 | 8 | u8 | `usb_state`: 0 detached, 1 suspended, 2 active |
-| 9 | u8 | `wake_methods` supported (`HK_WAKE_*` mask) |
+| 9 | u8 | `wake_methods` supported (`HK_WAKE_*` mask; bit4 once a wake beacon is learned) |
 | 10 | u8 | `remote_wakeup_enabled`: the console armed USB remote wakeup |
 
 ### `PING` (0x03) / `PONG` (0x83)
@@ -108,7 +108,7 @@ The D-pad becomes a hat (0 = up, clockwise, 8 = centred). Opposite directions pr
 
 | Offset | Size | Field |
 | --- | --- | --- |
-| 0 | u8 | `methods`: bit0 USB remote wakeup, bit1 HOME press, bit2 power button, bit3 HDMI-CEC (reserved) |
+| 0 | u8 | `methods`: bit0 USB remote wakeup, bit1 HOME press, bit2 power button, bit3 HDMI-CEC (reserved), bit4 Bluetooth wake beacon. The bridge adds bit4 to any request with bit0 or bit1 once it has learned a beacon. |
 | 1 | u16 | `press_ms`: HOME hold / power-button pulse. 0 → defaults (120 ms HOME, 150 ms power). The power pulse is clamped to 20–5000 ms. |
 
 Requests are coalesced: a pending request is replaced, never queued. See [remote-wake.md](remote-wake.md) for the chain's logic.
@@ -150,6 +150,7 @@ Latency values saturate at 65535 µs. The firmware histograms use 25 µs linear 
 | 6 | `USB_BUS_RESET` | speed the bus came up at (TinyUSB `tusb_speed_t`: 0 full, 1 low, 2 high) |
 | 7 | `USB_SETUP` | `(bmRequestType << 24) \| (bRequest << 16) \| wValue` of each control request the console sends; shows how far enumeration gets before the console mounts (or drops) the bridge |
 | 8 | `CONSOLE_CMD` | `(report_id << 8) \| command` for each Pro Controller handshake command the console sends: `0x80` USB commands and `0x01` subcommands (rumble-only `0x10` reports are not traced) |
+| 9 | `BLE_LEARNED` | product ID of the paired controller whose Bluetooth wake beacon the bridge just learned (`0x2066` Joy-Con 2 L, `0x2067` R, `0x2069` Pro Controller 2) |
 
 ### Session rules (firmware)
 

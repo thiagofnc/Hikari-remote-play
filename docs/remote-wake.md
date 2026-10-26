@@ -6,10 +6,33 @@ You're away from home and the Switch is asleep in its dock. You press **Play**, 
 
 | Method | Needs | Works on Switch 2? |
 | --- | --- | --- |
-| **USB remote wakeup** | The console must *arm* remote wakeup for the bridge before it suspends the bus | **Unknown until tested on hardware.** Hikari detects and reports it for your console. |
-| **HOME press** | The USB bus is active (console awake but showing no picture, or just resumed) | Brings the picture back from the lock or sleep screen once the bus is up |
+| **Bluetooth wake beacon** | A Joy-Con 2 paired with the console, used once so the bridge can learn its wake signal | **Yes.** This is how Hikari wakes a sleeping Switch 2. No extra hardware. |
+| **USB remote wakeup** | The console must *arm* remote wakeup for the bridge before it suspends the bus | **No.** The Switch 2 never arms it. |
+| **HOME press** | The console is taking input from the bridge (awake but showing no picture) | Brings the picture back from the lock screen. It can't wake a sleeping console: no USB input does. |
 | **Power-button fallback** | Optional extra hardware: optocoupler or actuator + one GPIO | Works whenever pressing the power button works, because it *is* a power-button press |
 | HDMI-CEC | Future idea | Not implemented |
+
+## What a sleeping Switch 2 does with USB
+
+Measured with the bridge's USB trace (`EVENT USB_BUS_RESET`, `USB_SETUP` and `CONSOLE_CMD`, see [protocol.md](protocol.md)):
+
+- When it goes to sleep, the console ends the controller session (`0x80 0x05`) and **resets the bus**. It does not suspend it and never arms remote wakeup, so there is nothing to resume.
+- It ignores a controller plugged in (or re-attached) while it sleeps.
+- When the dock powers up, a sleeping console briefly sets the controller up, runs the handshake, streams input for about a second and lets it go again. A HOME press in that window does not wake it.
+- A real wired controller can't wake it either.
+
+What it *does* keep listening for is its paired **Switch 2 controllers over Bluetooth LE**.
+
+## The Bluetooth wake beacon
+
+Pressing HOME on a paired Joy-Con 2 while the console sleeps makes the Joy-Con broadcast a short Bluetooth LE advertisement: Nintendo's company ID `0x0553`, a state byte `0x81` and the console's Bluetooth address. It is not encrypted. The console wakes when it hears it from the address of a controller it has paired with. The layout comes from community research ([nintendo-switch2-esp32-waker](https://github.com/thiagobucca/nintendo-switch2-esp32-waker)).
+
+The bridge's ESP32-S3 listens for that beacon all the time (`firmware/esp32-s3/main/ble_wake.c`):
+
+1. **Learning, once.** Detach a Joy-Con 2, put the Switch to sleep, then press HOME on the Joy-Con within a few metres of the bridge. The console wakes as usual and the bridge saves the beacon and the Joy-Con's address in flash. The host log says `Bridge learned the Bluetooth wake beacon of controller 0x2066` (`0x2067` for a right Joy-Con).
+2. **Waking.** On **Play**, the bridge broadcasts the same beacon from the Joy-Con's address for 2 s, then waits up to 10 s for the console to ask for input again before it tries anything else. In particular it never presses the power-button helper while the console may still be booting.
+
+Nothing is installed on or changed in the console: the bridge only repeats a broadcast the Joy-Con already sends in the open. Re-pairing that Joy-Con (or pairing it with another console) changes its beacon; wake the console with it once more and the bridge learns the new one. The bridge adds the beacon to any wake request, so hosts older than this feature use it too.
 
 ## How USB sleep and wake work
 
@@ -18,9 +41,9 @@ When a USB host (the dock and console) goes to sleep, it usually **suspends** th
 1. **Advertising.** The bridge's configuration descriptor sets the *Remote Wakeup* attribute (`TUSB_DESC_CONFIG_ATT_REMOTE_WAKEUP` in `profile_hori.c`). That only means the device is *capable* of it.
 2. **Arming.** Before suspending, the host must send `SET_FEATURE(DEVICE_REMOTE_WAKEUP)`. Only then may the device drive *resume signalling* on the bus to wake the host. TinyUSB passes this flag to the firmware in `tud_suspend_cb(remote_wakeup_en)`.
 
-Many consoles and PCs never arm remote wakeup for game controllers, or only for some. We don't know yet what the Switch 2 does with a wired HORI-class pad, and we won't guess.
+Many consoles and PCs never arm remote wakeup for game controllers, or only for some. The Switch 2 is one of them (see above), so the bridge keeps USB remote wakeup in the chain only for consoles that do arm it.
 
-A second unknown is **what the bridge sees while the console sleeps**. The bus might be *suspended* (dock power stays on, which is the ideal case), or the device might look *detached* (the bus goes away). The firmware reports whichever happens.
+The bridge reports a bus reset as `detached` until the console sets it up again. A sleeping Switch 2 therefore shows `detached`, and the bridge treats the console as awake only while it is taking input.
 
 ## What the firmware does
 
@@ -36,17 +59,22 @@ When the host sends `WAKE(methods, press_ms)`, the `wake` task (`firmware/esp32-
 
 ```mermaid
 flowchart TD
-    A([WAKE request]) --> B{USB active?}
+    A([WAKE request]) --> B{"Console taking input?"}
     B -- yes --> B1["Report ALREADY_AWAKE<br/>press HOME (picture may be off)"] --> Z([done])
     B -- no --> C{"Remote wakeup requested?"}
-    C -- no --> P
+    C -- no --> L
     C -- yes --> D{"Bus suspended?"}
-    D -- "no (detached)" --> D1[Report UNSUPPORTED] --> P
+    D -- "no (detached)" --> D1[Report UNSUPPORTED] --> L
     D -- yes --> E{"Console armed<br/>remote wakeup?"}
-    E -- no --> E1[Report NOT_PERMITTED] --> P
+    E -- no --> E1[Report NOT_PERMITTED] --> L
     E -- yes --> F["Send resume signalling<br/>Report SENT"] --> G{"Bus active<br/>within 1.5 s?"}
     G -- yes --> H["Wait 150 ms, press HOME<br/>Report SENT"] --> Z
-    G -- no --> P
+    G -- no --> L
+    L{"Beacon learned?"}
+    L -- no --> P
+    L -- yes --> L1["Broadcast the Joy-Con 2 beacon 2 s<br/>Report SENT"] --> L2{"Console takes input<br/>within 10 s?"}
+    L2 -- yes --> Z
+    L2 -- no --> P
     P{"Power button requested?"}
     P -- no --> Z
     P -- yes --> Q{"GPIO fitted?"}
