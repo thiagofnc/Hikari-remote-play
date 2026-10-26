@@ -746,7 +746,7 @@ void HostApp::tick(uint64_t now)
         if (!failed) set_phase(SessionPhase::Lobby, "");
     }
     if (manual_wake_.exchange(false) && b.connected)
-        bridge_.request_wake(HK_WAKE_USB_REMOTE_WAKEUP | HK_WAKE_HOME_PRESS, press_ms);
+        bridge_.request_wake(HK_WAKE_USB_REMOTE_WAKEUP | HK_WAKE_HOME_PRESS | HK_WAKE_BLE_BEACON, press_ms);
     if (sleep_requested_.exchange(false) && b.connected && (b.wake_methods & HK_WAKE_POWER_BUTTON))
         bridge_.request_wake(HK_WAKE_POWER_BUTTON, press_ms);
 
@@ -797,12 +797,13 @@ void HostApp::tick(uint64_t now)
             // Awake on the bus but no picture: sleep screen / TV mode handoff.
             set_phase(SessionPhase::WaitingForVideo, "Waiting for the Switch's picture");
             if (now >= next_wake_at_ && wake_attempts_ < 4) {
-                bridge_.request_wake(HK_WAKE_HOME_PRESS, press_ms);
+                // The bridge only sends the beacon if the console is not taking input.
+                bridge_.request_wake(HK_WAKE_HOME_PRESS | HK_WAKE_BLE_BEACON, press_ms);
                 ++wake_attempts_;
                 next_wake_at_ = now + 3'000'000;
             }
         } else if (now >= next_wake_at_ && wake_attempts_ < 6) {
-            uint8_t methods = HK_WAKE_USB_REMOTE_WAKEUP | HK_WAKE_HOME_PRESS;
+            uint8_t methods = HK_WAKE_USB_REMOTE_WAKEUP | HK_WAKE_HOME_PRESS | HK_WAKE_BLE_BEACON;
             // The power button toggles, so it is pressed at most once per Play.
             if (wake_attempts_ == 1 && (b.wake_methods & HK_WAKE_POWER_BUTTON)) methods |= HK_WAKE_POWER_BUTTON;
             bridge_.request_wake(methods, press_ms);
@@ -812,10 +813,12 @@ void HostApp::tick(uint64_t now)
         }
         if (now - since > kWakeTimeout) {
             const bool can_press = (b.wake_methods & HK_WAKE_POWER_BUTTON) != 0;
+            const bool can_beacon = (b.wake_methods & HK_WAKE_BLE_BEACON) != 0;
             set_phase(SessionPhase::Failed,
-                      can_press ? "Your Switch did not wake up. Check it is docked and the dock has power."
-                                : "Your Switch did not wake up. Press its power button, or fit the power-button "
-                                  "helper (see Remote wake in the docs).",
+                      can_press || can_beacon ? "Your Switch did not wake up. Check it is docked and the dock has power."
+                                              : "Your Switch did not wake up. Wake it once with a detached Joy-Con 2 "
+                                                "near the controller bridge so it can learn how (see Remote wake in "
+                                                "the docs).",
                       HostIssue::WakeFailed);
         }
         break;
