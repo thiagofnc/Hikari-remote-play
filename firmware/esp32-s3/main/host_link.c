@@ -12,7 +12,7 @@
 #include "telemetry.h"
 #include "wake.h"
 
-#define FW_VERSION 0x0103
+#define FW_VERSION 0x0104
 #define RX_BUF 1024
 #define TX_BUF 512
 

@@ -6,7 +6,11 @@
 //                           sleeping (reported to the host as a capability).
 //   2. HOME press         - once the bus resumes, press HOME so the console
 //                           leaves the sleep screen and turns on HDMI.
-//   3. Power button       - optional hardware fallback: GPIO pulse into an
+//   3. BLE beacon         - replay the Bluetooth LE wake beacon of a paired
+//                           Joy-Con 2, learned by the bridge (see ble_wake.h).
+//                           The only method a sleeping Switch 2 responds to
+//                           without extra hardware.
+//   4. Power button       - optional hardware fallback: GPIO pulse into an
 //                           optocoupler/relay across the console's power button.
 //
 // Every attempt is reported to the host as an HK_EVENT_WAKE event so the host

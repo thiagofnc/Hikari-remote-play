@@ -7,8 +7,10 @@
 //   host_rx     core 1  max-2   parses UART frames, publishes newest state, notifies usb_report
 //   tinyusb     core 0  22      TinyUSB device stack (esp_tinyusb)
 //   wake        core 0  3       wake strategies (may block for seconds)
+//   nimble_host core 0  -       Bluetooth LE: learns and replays the Switch 2 wake beacon
 //   main        core 0  1       1 Hz telemetry to the host
 
+#include "ble_wake.h"
 #include "board.h"
 #include "console_usb.h"
 #include "esp_timer.h"
@@ -29,6 +31,7 @@ void app_main(void)
 
     TaskHandle_t usb_task = console_usb_init();
     host_link_init(usb_task);
+    ble_wake_init();  // after NVS (console_usb_init) and the host link (it reports what it learns)
 
     for (;;) {
         vTaskDelay(pdMS_TO_TICKS(1000));

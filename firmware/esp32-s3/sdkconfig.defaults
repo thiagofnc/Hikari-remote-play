@@ -25,3 +25,15 @@ CONFIG_TINYUSB_TASK_AFFINITY_CPU0=y
 # Watchdogs stay on: a hung bridge must reboot into the neutral state.
 CONFIG_ESP_TASK_WDT_EN=y
 CONFIG_ESP_TASK_WDT_TIMEOUT_S=3
+
+# Bluetooth LE (NimBLE) for the Switch 2 wake beacon: scan to learn it, then
+# advertise it. No central role, one connection (the console may connect to
+# the connectable beacon; we drop it).
+CONFIG_BT_ENABLED=y
+CONFIG_BT_NIMBLE_ENABLED=y
+CONFIG_BT_NIMBLE_ROLE_CENTRAL=n
+CONFIG_BT_NIMBLE_ROLE_PERIPHERAL=y
+CONFIG_BT_NIMBLE_ROLE_BROADCASTER=y
+CONFIG_BT_NIMBLE_ROLE_OBSERVER=y
+CONFIG_BT_NIMBLE_MAX_CONNECTIONS=1
+CONFIG_BT_NIMBLE_SECURITY_ENABLE=n

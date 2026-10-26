@@ -124,6 +124,7 @@ enum hk_usb_state {
 #define HK_WAKE_HOME_PRESS (1u << 1)        /* press HOME once the bus resumes */
 #define HK_WAKE_POWER_BUTTON (1u << 2)      /* GPIO pulse into an optocoupler/relay across the power button */
 #define HK_WAKE_HDMI_CEC (1u << 3)          /* reserved: CEC <Image View On>/<User Control Pressed: Power> */
+#define HK_WAKE_BLE_BEACON (1u << 4)        /* replay a paired Joy-Con 2's Bluetooth LE wake beacon (learned by the bridge) */
 
 /* A request whose mask is exactly HK_WAKE_POWER_BUTTON is a raw power-button
  * press in any console state (the host uses it to put the console to sleep). */
@@ -188,6 +189,7 @@ enum hk_event_code {
     HK_EVENT_USB_BUS_RESET = 6, /* arg = tusb_speed_t the bus came up at */
     HK_EVENT_USB_SETUP = 7,     /* arg = (bmRequestType << 24) | (bRequest << 16) | wValue */
     HK_EVENT_CONSOLE_CMD = 8,   /* arg = (report_id << 8) | command: a handshake command from the console */
+    HK_EVENT_BLE_LEARNED = 9,   /* arg = product ID of the controller whose wake beacon the bridge learned */
 };
 
 enum hk_wake_result {

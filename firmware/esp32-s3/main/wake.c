@@ -1,5 +1,6 @@
 #include "wake.h"
 
+#include "ble_wake.h"
 #include "board.h"
 #include "console_usb.h"
 #include "freertos/FreeRTOS.h"
@@ -14,8 +15,12 @@ uint8_t wake_supported_methods(void)
 {
     uint8_t m = HK_WAKE_USB_REMOTE_WAKEUP | HK_WAKE_HOME_PRESS;
     if (board_has_power_button()) m |= HK_WAKE_POWER_BUTTON;
+    if (ble_wake_ready()) m |= HK_WAKE_BLE_BEACON;
     return m;
 }
+
+#define BLE_BEACON_MS 2000
+#define BLE_WAKE_WAIT_MS 10000  // console boot-up to asking for input again
 
 static void report(uint8_t method, uint8_t result)
 {
@@ -31,6 +36,15 @@ static bool wait_for_state(uint8_t want, uint32_t timeout_ms)
     return console_usb_state() == want;
 }
 
+static bool wait_for_streaming(uint32_t timeout_ms)
+{
+    for (uint32_t t = 0; t < timeout_ms; t += 10) {
+        if (console_usb_streaming()) return true;
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+    return console_usb_streaming();
+}
+
 static void press_home(uint16_t ms)
 {
     pad_store_set_injected_buttons(HK_BTN_HOME);
@@ -38,8 +52,15 @@ static void press_home(uint16_t ms)
     pad_store_set_injected_buttons(0);
 }
 
-static void run_wake(const hk_wake *w)
+static void run_wake(const hk_wake *req)
 {
+    // Hosts from before the beacon existed ask for USB/HOME only; neither can
+    // wake a sleeping Switch 2, so the learned beacon joins any such request.
+    hk_wake wake = *req;
+    if ((wake.methods & (HK_WAKE_USB_REMOTE_WAKEUP | HK_WAKE_HOME_PRESS)) && ble_wake_ready())
+        wake.methods |= HK_WAKE_BLE_BEACON;
+    const hk_wake *w = &wake;
+
     // A request for *only* the power button is a raw button press (used by
     // the host for "put the console to sleep"), regardless of state.
     if (w->methods == HK_WAKE_POWER_BUTTON) {
@@ -52,7 +73,9 @@ static void run_wake(const hk_wake *w)
         return;
     }
 
-    if (console_usb_state() == HK_USB_ACTIVE) {
+    // "Awake" means the console is taking input: a sleeping Switch 2 can
+    // still have us enumerated but never asks for the input stream.
+    if (console_usb_streaming()) {
         report(0, HK_WAKE_RESULT_ALREADY_AWAKE);
         // Awake bus but the host still asked: the console may be on the
         // sleep/lock screen with HDMI off. HOME brings the picture back.
@@ -81,6 +104,14 @@ static void run_wake(const hk_wake *w)
         }
     }
 
+    if (w->methods & HK_WAKE_BLE_BEACON) {
+        const uint8_t r = ble_wake_send(BLE_BEACON_MS);
+        report(HK_WAKE_BLE_BEACON, r);
+        // Never fall through to the power button while the console may be
+        // booting from the beacon: the button toggles and would put it back.
+        if (r == HK_WAKE_RESULT_SENT && wait_for_streaming(BLE_WAKE_WAIT_MS)) return;
+    }
+
     if (w->methods & HK_WAKE_POWER_BUTTON) {
         if (!board_has_power_button()) {
             report(HK_WAKE_POWER_BUTTON, HK_WAKE_RESULT_UNSUPPORTED);
@@ -102,7 +133,7 @@ static void wake_task(void *arg)
 void wake_init(void)
 {
     s_queue = xQueueCreate(1, sizeof(hk_wake));  // length 1 for xQueueOverwrite
-    xTaskCreatePinnedToCore(wake_task, "wake", 3072, NULL, 3, NULL, 0);
+    xTaskCreatePinnedToCore(wake_task, "wake", 4096, NULL, 3, NULL, 0);
 }
 
 void wake_request(const hk_wake *w)
