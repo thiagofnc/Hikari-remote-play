@@ -306,6 +306,13 @@ void Bridge::handle_frame(const hk_link_frame& f)
             status_.last_wake_event = e.arg;
             status_.last_wake_event_us = now;
             HK_LOGI("Wake attempt: method 0x%02x result %u", (e.arg >> 8) & 0xFF, e.arg & 0xFF);
+        } else if (e.code == HK_EVENT_USB_BUS_RESET) {
+            HK_LOGI("Console USB: bus reset (speed %u)", e.arg);
+        } else if (e.code == HK_EVENT_USB_SETUP) {
+            HK_LOGI("Console USB: request type 0x%02x req 0x%02x value 0x%04x", e.arg >> 24, (e.arg >> 16) & 0xFF,
+                    e.arg & 0xFFFF);
+        } else if (e.code == HK_EVENT_CONSOLE_CMD) {
+            HK_LOGI("Console command: report 0x%02x cmd 0x%02x", (e.arg >> 8) & 0xFF, e.arg & 0xFF);
         }
         break;
     }

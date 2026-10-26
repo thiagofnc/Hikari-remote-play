@@ -184,6 +184,10 @@ enum hk_event_code {
     HK_EVENT_FAILSAFE = 3,    /* arg = 1 entered, 0 left */
     HK_EVENT_LATENCY_MARK = 4,/* arg = pad seq that pulsed the marker */
     HK_EVENT_WAKE = 5,        /* arg = (method_tried << 8) | result (hk_wake_result) */
+    /* Enumeration trace: shows how far a console gets before (or without) mounting us. */
+    HK_EVENT_USB_BUS_RESET = 6, /* arg = tusb_speed_t the bus came up at */
+    HK_EVENT_USB_SETUP = 7,     /* arg = (bmRequestType << 24) | (bRequest << 16) | wValue */
+    HK_EVENT_CONSOLE_CMD = 8,   /* arg = (report_id << 8) | command: a handshake command from the console */
 };
 
 enum hk_wake_result {

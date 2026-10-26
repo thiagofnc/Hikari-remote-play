@@ -147,6 +147,9 @@ Latency values saturate at 65535 µs. The firmware histograms use 25 µs linear 
 | 3 | `FAILSAFE` | 1 entered, 0 left |
 | 4 | `LATENCY_MARK` | `seq` of the pad state that pulsed the marker GPIO |
 | 5 | `WAKE` | `(method << 8) \| result`. Result: 1 sent, 2 unsupported, 3 not permitted (console didn't arm remote wakeup), 4 already awake |
+| 6 | `USB_BUS_RESET` | speed the bus came up at (TinyUSB `tusb_speed_t`: 0 full, 1 low, 2 high) |
+| 7 | `USB_SETUP` | `(bmRequestType << 24) \| (bRequest << 16) \| wValue` of each control request the console sends; shows how far enumeration gets before the console mounts (or drops) the bridge |
+| 8 | `CONSOLE_CMD` | `(report_id << 8) \| command` for each Pro Controller handshake command the console sends: `0x80` USB commands and `0x01` subcommands (rumble-only `0x10` reports are not traced) |
 
 ### Session rules (firmware)
 

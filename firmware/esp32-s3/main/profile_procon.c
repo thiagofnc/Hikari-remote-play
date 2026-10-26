@@ -17,6 +17,7 @@
 #include "console_profile.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
+#include "host_link.h"
 
 #define PRO_VID 0x057E
 #define PRO_PID 0x2009
@@ -264,6 +265,9 @@ static void pro_output(uint8_t report_id, const uint8_t *buf, uint16_t len)
         len++;
     }
     if (len < 2) return;
+    // Trace the handshake for the host log (rumble-only 0x10 is far too chatty).
+    if (buf[0] == 0x80 || buf[0] == 0x01)
+        host_link_send_event(HK_EVENT_CONSOLE_CMD, ((uint32_t)buf[0] << 8) | (buf[0] == 0x80 ? buf[1] : len > 10 ? buf[10] : 0xFF));
     if (buf[0] == 0x80) usb_command(buf[1]);
     else if (buf[0] == 0x01) subcommand(buf, len);
     // 0x10 (rumble only) needs no answer.

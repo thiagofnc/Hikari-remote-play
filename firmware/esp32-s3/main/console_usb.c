@@ -4,6 +4,8 @@
 
 #include "board.h"
 #include "console_profile.h"
+#include "device/dcd.h"
+#include "esp_attr.h"
 #include "esp_system.h"
 #include "esp_timer.h"
 #include "hk_link.h"
@@ -77,6 +79,51 @@ bool console_usb_remote_wakeup(void)
 }
 
 static void notify_state(void) { host_link_send_event(HK_EVENT_USB_STATE, console_usb_state()); }
+
+/* ---- enumeration trace -------------------------------------------------------
+ * TinyUSB only tells us about a console once it sets a configuration (mount).
+ * To see how far a console that never mounts us gets, the DCD event handler is
+ * wrapped at link time (-Wl,--wrap=dcd_event_handler, see CMakeLists.txt): bus
+ * resets and setup packets are queued from the USB ISR and the report task
+ * forwards them to the host as events. Enumeration is a few dozen packets. */
+
+void __real_dcd_event_handler(dcd_event_t const *event, bool in_isr);
+
+#define TRACE_LEN 64
+static struct {
+    uint8_t code;
+    uint32_t arg;
+} s_trace[TRACE_LEN];
+static uint32_t s_trace_head, s_trace_tail; // head: USB ISR only, tail: report task only
+
+static IRAM_ATTR void trace_push(uint8_t code, uint32_t arg)
+{
+    const uint32_t head = s_trace_head;
+    if (head - __atomic_load_n(&s_trace_tail, __ATOMIC_ACQUIRE) >= TRACE_LEN) return; // full: drop
+    s_trace[head % TRACE_LEN].code = code;
+    s_trace[head % TRACE_LEN].arg = arg;
+    __atomic_store_n(&s_trace_head, head + 1, __ATOMIC_RELEASE);
+}
+
+IRAM_ATTR void __wrap_dcd_event_handler(dcd_event_t const *event, bool in_isr)
+{
+    if (event->event_id == DCD_EVENT_BUS_RESET) {
+        trace_push(HK_EVENT_USB_BUS_RESET, event->bus_reset.speed);
+    } else if (event->event_id == DCD_EVENT_SETUP_RECEIVED) {
+        const tusb_control_request_t *r = &event->setup_received;
+        trace_push(HK_EVENT_USB_SETUP, ((uint32_t)r->bmRequestType << 24) | ((uint32_t)r->bRequest << 16) | r->wValue);
+    }
+    __real_dcd_event_handler(event, in_isr);
+}
+
+static void trace_flush(void)
+{
+    uint32_t tail = s_trace_tail;
+    while (tail != __atomic_load_n(&s_trace_head, __ATOMIC_ACQUIRE)) {
+        host_link_send_event(s_trace[tail % TRACE_LEN].code, s_trace[tail % TRACE_LEN].arg);
+        __atomic_store_n(&s_trace_tail, ++tail, __ATOMIC_RELEASE);
+    }
+}
 
 /* ---- TinyUSB callbacks (run in the TinyUSB task) ------------------------ */
 
@@ -163,6 +210,7 @@ static void report_task(void *arg)
     for (;;) {
         ulTaskNotifyTake(pdTRUE, keepalive > 0 ? keepalive : 1);
         const int64_t now = esp_timer_get_time();
+        trace_flush();
 
         // Failsafe: never leave a button held if the host goes quiet.
         const int64_t last_rx = host_link_last_valid_rx_us();
