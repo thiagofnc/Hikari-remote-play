@@ -11,6 +11,9 @@
 TaskHandle_t console_usb_init(void);
 
 uint8_t console_usb_state(void);              // hk_usb_state
+// Configured and getting input reports: the console is really awake (a
+// sleeping Switch 2 can still enumerate us, but never asks for input).
+bool console_usb_streaming(void);
 bool console_usb_remote_wakeup_enabled(void); // console armed remote wakeup
 // Requests USB resume signalling. Returns false if not suspended/permitted.
 bool console_usb_remote_wakeup(void);

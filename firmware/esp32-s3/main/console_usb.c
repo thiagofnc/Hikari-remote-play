@@ -23,6 +23,7 @@ static TaskHandle_t s_task;
 static volatile bool s_mounted;
 static volatile bool s_suspended;
 static volatile bool s_remote_wakeup_en;
+static volatile bool s_bus_reset; // USB ISR saw a bus reset; report task tells the host
 
 /* In-flight report bookkeeping (report task writes, TinyUSB task reads). */
 static volatile int64_t s_inflight_rx_us;
@@ -33,6 +34,11 @@ uint8_t console_usb_state(void)
 {
     if (!s_mounted) return HK_USB_DETACHED;
     return s_suspended ? HK_USB_SUSPENDED : HK_USB_ACTIVE;
+}
+
+bool console_usb_streaming(void)
+{
+    return s_mounted && !s_suspended && (!s_profile->streaming || s_profile->streaming());
 }
 
 bool console_usb_remote_wakeup_enabled(void) { return s_remote_wakeup_en; }
@@ -108,6 +114,12 @@ static IRAM_ATTR void trace_push(uint8_t code, uint32_t arg)
 IRAM_ATTR void __wrap_dcd_event_handler(dcd_event_t const *event, bool in_isr)
 {
     if (event->event_id == DCD_EVENT_BUS_RESET) {
+        // TinyUSB has no unmount callback for a bus reset, yet we are no
+        // longer configured: a Switch 2 going to sleep resets the bus and
+        // never sets us up again, which must not read as "awake".
+        s_mounted = false;
+        s_suspended = false;
+        s_bus_reset = true;
         trace_push(HK_EVENT_USB_BUS_RESET, event->bus_reset.speed);
     } else if (event->event_id == DCD_EVENT_SETUP_RECEIVED) {
         const tusb_control_request_t *r = &event->setup_received;
@@ -212,6 +224,12 @@ static void report_task(void *arg)
         ulTaskNotifyTake(pdTRUE, keepalive > 0 ? keepalive : 1);
         const int64_t now = esp_timer_get_time();
         trace_flush();
+        if (s_bus_reset) {
+            s_bus_reset = false;
+            s_inflight_valid = false;
+            board_status_led(console_usb_state() == HK_USB_ACTIVE);
+            notify_state();
+        }
 
         // Failsafe: never leave a button held if the host goes quiet.
         const int64_t last_rx = host_link_last_valid_rx_us();
