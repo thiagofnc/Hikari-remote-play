@@ -203,6 +203,7 @@ static void report_task(void *arg)
     uint32_t sent_generation = UINT32_MAX;
     uint32_t sent_injected = 0;
     int64_t last_send_us = 0;
+    int64_t wake_stream_until_us = 0;
     bool failsafe = false;
     uint8_t report[64];
     const TickType_t keepalive = pdMS_TO_TICKS(CONFIG_HIKARI_KEEPALIVE_REPORT_MS);
@@ -243,7 +244,11 @@ static void report_task(void *arg)
             xTaskNotifyGive(xTaskGetCurrentTaskHandle());  // more replies may be queued
             continue;
         }
-        if (s_profile->streaming && !s_profile->streaming()) continue;
+        // A sleeping Switch 2 re-enumerates us but never asks for the input
+        // stream, so a wake press (injected HOME) is streamed regardless: the
+        // press itself and, for a moment after, its release.
+        if (injected) wake_stream_until_us = now + 200 * 1000;
+        if (s_profile->streaming && !s_profile->streaming() && now >= wake_stream_until_us) continue;
 
         const bool changed = snap.generation != sent_generation || injected != sent_injected;
         const bool due = (now - last_send_us) >= (int64_t)CONFIG_HIKARI_KEEPALIVE_REPORT_MS * 1000;
