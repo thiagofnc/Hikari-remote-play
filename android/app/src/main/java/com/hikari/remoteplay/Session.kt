@@ -92,7 +92,9 @@ class Session(private val context: Context) : ClientNetListener {
 
     fun onForeground() {
         foreground = true
-        if (_screen.value == Screen.Setup) client.discovery = true else connect()
+        if (_screen.value == Screen.Setup) client.discovery = true
+        // Reconnecting a live session would make the host start a new one.
+        else if (client.state == ConnState.Idle) connect()
     }
 
     fun onBackground() {
@@ -157,6 +159,7 @@ class Session(private val context: Context) : ClientNetListener {
         if (s != null && s.phase != SessionPhase.Lobby && s.phase != SessionPhase.Failed && s.phase != SessionPhase.Streaming) return
         // Optimistic: show progress immediately.
         stopPending = false
+        playSentAt = android.os.SystemClock.uptimeMillis()
         _status.value = (s ?: HostStatus()).copy(phase = SessionPhase.Waking, phaseElapsedMs = 0)
         decoder.resetForNewStream()
         client.play()
@@ -165,6 +168,8 @@ class Session(private val context: Context) : ClientNetListener {
     // Set by Stop until the host reports it left Streaming, so a status packet
     // already in flight does not pull the user straight back into the stream.
     private var stopPending = false
+    // A status the host sent before it saw Play still says Lobby; don't flash back to Play for it.
+    private var playSentAt = 0L
 
     fun stopStream() {
         client.stopStream()
@@ -295,6 +300,13 @@ class Session(private val context: Context) : ClientNetListener {
     override fun onHostStatus(status: HostStatus) {
         main.post {
             val prev = _status.value
+            if (status.phase != SessionPhase.Lobby) playSentAt = 0
+            if (status.phase == SessionPhase.Lobby && prev != null && playSentAt != 0L &&
+                android.os.SystemClock.uptimeMillis() - playSentAt < 1500
+            ) {
+                _status.value = status.copy(phase = prev.phase, message = prev.message)
+                return@post
+            }
             _status.value = status
             if (status.phase != SessionPhase.Streaming) stopPending = false
             if (status.phase == SessionPhase.Streaming && !stopPending) enterStream()

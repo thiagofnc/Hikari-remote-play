@@ -33,7 +33,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge(statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT))
         super.onCreate(savedInstanceState)
-        session = Session(applicationContext)
+        session = (application as HikariApp).session
         handleIntent(intent)
 
         setContent {
@@ -93,13 +93,9 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onStop() {
-        session.onBackground()
+        // Recreated for a configuration change (e.g. rotating into the stream): not leaving.
+        if (!isChangingConfigurations) session.onBackground()
         super.onStop()
-    }
-
-    override fun onDestroy() {
-        session.shutdown()
-        super.onDestroy()
     }
 
     // ---- physical controllers ----------------------------------------------------------
