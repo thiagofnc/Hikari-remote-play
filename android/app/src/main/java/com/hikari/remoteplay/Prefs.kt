@@ -35,6 +35,11 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("haptics", true)
         set(v) = sp.edit().putBoolean("haptics", v).apply()
 
+    // Full screen stretches the picture to the display; off keeps its 16:9 shape with bars.
+    var fullScreen: Boolean
+        get() = sp.getBoolean("full_screen", true)
+        set(v) = sp.edit().putBoolean("full_screen", v).apply()
+
     var showStats: Boolean
         get() = sp.getBoolean("show_stats", false)
         set(v) = sp.edit().putBoolean("show_stats", v).apply()

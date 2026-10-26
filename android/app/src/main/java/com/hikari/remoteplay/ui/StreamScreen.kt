@@ -66,6 +66,7 @@ fun StreamScreen(session: Session) {
     var opacity by remember { mutableFloatStateOf(session.prefs.controlsOpacity) }
     var scale by remember { mutableFloatStateOf(session.prefs.controlsScale) }
     var haptics by remember { mutableStateOf(session.prefs.haptics) }
+    var fullScreen by remember { mutableStateOf(session.prefs.fullScreen) }
     var shown by remember { mutableLongStateOf(0L) }
 
     LaunchedEffect(Unit) {
@@ -100,7 +101,7 @@ fun StreamScreen(session: Session) {
                     })
                 }
             },
-            modifier = Modifier.aspectRatio(aspect),
+            modifier = if (fullScreen) Modifier.fillMaxSize() else Modifier.aspectRatio(aspect),
         )
 
         if (shown == 0L) {
@@ -151,6 +152,8 @@ fun StreamScreen(session: Session) {
                 onScale = { scale = it; session.prefs.controlsScale = it },
                 haptics = haptics,
                 onHaptics = { haptics = it; session.prefs.haptics = it },
+                fullScreen = fullScreen,
+                onFullScreen = { fullScreen = it; session.prefs.fullScreen = it },
             )
         }
     }
@@ -164,6 +167,7 @@ private fun StreamMenu(
     opacity: Float, onOpacity: (Float) -> Unit,
     scale: Float, onScale: (Float) -> Unit,
     haptics: Boolean, onHaptics: (Boolean) -> Unit,
+    fullScreen: Boolean, onFullScreen: (Boolean) -> Unit,
 ) {
     val preset by session.preset.collectAsState()
     Box(
@@ -201,6 +205,7 @@ private fun StreamMenu(
                 onSelect = session::setPreset,
                 modifier = Modifier.fillMaxWidth(),
             )
+            ToggleRow("Fill the whole screen", fullScreen, onFullScreen)
             ToggleRow("Performance overlay", showStats, onShowStats)
             Spacer(Modifier.height(10.dp))
             SectionLabel("Touch controls")

@@ -144,9 +144,14 @@ class VideoDecoder(private val net: HikariClient) {
                     failed = true
                 }
 
-                override fun onOutputFormatChanged(codec: MediaCodec, format: MediaFormat) {}
+                // Some decoders reset the scaling mode on format changes.
+                override fun onOutputFormatChanged(codec: MediaCodec, format: MediaFormat) {
+                    runCatching { codec.setVideoScalingMode(MediaCodec.VIDEO_SCALING_MODE_SCALE_TO_FIT) }
+                }
             }, callbackHandler)
             c.configure(fmt, s, null, 0)
+            // Scale the whole picture to the surface; never crop its edges.
+            c.setVideoScalingMode(MediaCodec.VIDEO_SCALING_MODE_SCALE_TO_FIT)
             c.start()
             codec = c
             failed = false
