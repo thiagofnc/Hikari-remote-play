@@ -2,6 +2,7 @@ package com.hikari.remoteplay.ui
 
 import android.view.SurfaceHolder
 import android.view.SurfaceView
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -9,6 +10,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -17,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -48,6 +51,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.hikari.remoteplay.PictureMode
 import com.hikari.remoteplay.Session
 import com.hikari.remoteplay.input.TouchControlsView
 import com.hikari.remoteplay.proto.Preset
@@ -66,7 +70,11 @@ fun StreamScreen(session: Session) {
     var opacity by remember { mutableFloatStateOf(session.prefs.controlsOpacity) }
     var scale by remember { mutableFloatStateOf(session.prefs.controlsScale) }
     var haptics by remember { mutableStateOf(session.prefs.haptics) }
-    var fullScreen by remember { mutableStateOf(session.prefs.fullScreen) }
+    var pictureMode by remember { mutableStateOf(session.prefs.pictureMode) }
+    var editingLayout by remember { mutableStateOf(false) }
+    var editSelection by remember { mutableStateOf<TouchControlsView.Group?>(null) }
+    var editSize by remember { mutableFloatStateOf(1f) }
+    var controlsView by remember { mutableStateOf<TouchControlsView?>(null) }
     var shown by remember { mutableLongStateOf(0L) }
 
     LaunchedEffect(Unit) {
@@ -76,9 +84,11 @@ fun StreamScreen(session: Session) {
         }
     }
 
-    val controlsVisible = showControls && !gamepadActive && !menuOpen
+    val controlsVisible = (showControls && !gamepadActive && !menuOpen) || editingLayout
 
-    Box(
+    BackHandler(enabled = editingLayout) { editingLayout = false }
+
+    BoxWithConstraints(
         Modifier
             .fillMaxSize()
             .background(Color.Black)
@@ -101,7 +111,13 @@ fun StreamScreen(session: Session) {
                     })
                 }
             },
-            modifier = if (fullScreen) Modifier.fillMaxSize() else Modifier.aspectRatio(aspect),
+            modifier = when (pictureMode) {
+                PictureMode.Fit -> Modifier.aspectRatio(aspect)
+                PictureMode.Stretch -> Modifier.fillMaxSize()
+                // Cover the screen keeping the picture's shape; the overflow is off screen.
+                PictureMode.Fill -> if (maxWidth / maxHeight > aspect) Modifier.requiredSize(maxWidth, maxWidth / aspect)
+                else Modifier.requiredSize(maxHeight * aspect, maxHeight)
+            },
         )
 
         if (shown == 0L) {
@@ -118,21 +134,41 @@ fun StreamScreen(session: Session) {
                     TouchControlsView(ctx).apply {
                         onPadChanged = session::onTouchPad
                         onMenu = session::openMenu
+                        onSelectionChanged = { g ->
+                            editSelection = g
+                            if (g != null) editSize = groupSize(g)
+                        }
+                        onLayoutChanged = { session.prefs.controlsLayout = it }
+                        setLayout(session.prefs.controlsLayout)
+                        controlsView = this
                     }
                 },
                 update = {
                     it.opacity = opacity
                     it.scale = scale
                     it.haptics = haptics
+                    it.editing = editingLayout
                 },
                 onRelease = {
                     it.releaseAll()
+                    if (controlsView === it) controlsView = null
                 },
                 modifier = Modifier.fillMaxSize(),
             )
         } else if (!menuOpen) {
             // Release anything the touch layer was holding when it went away.
             LaunchedEffect(Unit) { session.onTouchPad(com.hikari.remoteplay.proto.PadState.NEUTRAL) }
+        }
+
+        if (editingLayout) {
+            LayoutEditor(
+                selection = editSelection,
+                size = editSize,
+                onSize = { v -> editSelection?.let { controlsView?.setGroupSize(it, v) }; editSize = v },
+                onReset = { controlsView?.resetLayout(); editSize = 1f },
+                onDone = { editingLayout = false },
+                modifier = Modifier.align(Alignment.Center),
+            )
         }
 
         if (showStats) StatsOverlay(session, Modifier.align(Alignment.TopStart).padding(10.dp))
@@ -152,8 +188,15 @@ fun StreamScreen(session: Session) {
                 onScale = { scale = it; session.prefs.controlsScale = it },
                 haptics = haptics,
                 onHaptics = { haptics = it; session.prefs.haptics = it },
-                fullScreen = fullScreen,
-                onFullScreen = { fullScreen = it; session.prefs.fullScreen = it },
+                pictureMode = pictureMode,
+                onPictureMode = { pictureMode = it; session.prefs.pictureMode = it },
+                onEditLayout = {
+                    showControls = true
+                    session.prefs.showControls = true
+                    session.showTouchControls()
+                    editingLayout = true
+                    session.closeMenu()
+                },
             )
         }
     }
@@ -167,7 +210,8 @@ private fun StreamMenu(
     opacity: Float, onOpacity: (Float) -> Unit,
     scale: Float, onScale: (Float) -> Unit,
     haptics: Boolean, onHaptics: (Boolean) -> Unit,
-    fullScreen: Boolean, onFullScreen: (Boolean) -> Unit,
+    pictureMode: PictureMode, onPictureMode: (PictureMode) -> Unit,
+    onEditLayout: () -> Unit,
 ) {
     val preset by session.preset.collectAsState()
     Box(
@@ -205,7 +249,17 @@ private fun StreamMenu(
                 onSelect = session::setPreset,
                 modifier = Modifier.fillMaxWidth(),
             )
-            ToggleRow("Fill the whole screen", fullScreen, onFullScreen)
+            Spacer(Modifier.height(10.dp))
+            SectionLabel("Picture")
+            Segmented(PictureMode.entries, pictureMode, label = { it.label }, onSelect = onPictureMode, modifier = Modifier.fillMaxWidth())
+            Text(
+                when (pictureMode) {
+                    PictureMode.Fit -> "The whole picture, sharp and undistorted. Wide phones show bars at the sides."
+                    PictureMode.Fill -> "Fills the screen by trimming a little off the top and bottom."
+                    PictureMode.Stretch -> "Fills the screen by widening the picture."
+                },
+                fontSize = 12.sp, color = Hk.textMuted, modifier = Modifier.padding(top = 6.dp, bottom = 4.dp),
+            )
             ToggleRow("Performance overlay", showStats, onShowStats)
             Spacer(Modifier.height(10.dp))
             SectionLabel("Touch controls")
@@ -213,10 +267,44 @@ private fun StreamMenu(
             ToggleRow("Vibrate on press", haptics, onHaptics)
             SliderRow("Opacity", opacity, 0.15f..1f, onOpacity)
             SliderRow("Size", scale, 0.7f..1.4f, onScale)
+            SecondaryButton("Move and resize controls", onClick = onEditLayout, modifier = Modifier.fillMaxWidth().padding(top = 4.dp))
             Text(
-                "Touch anywhere on an empty side to use that stick. Double-tap and hold a stick to click it. A connected controller hides the touch controls; tap the screen to bring them back.",
+                "Touch anywhere on an empty side to use that stick. Double-tap and hold a stick to click it. The D-pad presses one direction at a time; use the stick for diagonals. A connected controller hides the touch controls; tap the screen to bring them back.",
                 fontSize = 12.sp, color = Hk.textMuted, modifier = Modifier.padding(top = 6.dp),
             )
+        }
+    }
+}
+
+@Composable
+private fun LayoutEditor(
+    selection: TouchControlsView.Group?,
+    size: Float, onSize: (Float) -> Unit,
+    onReset: () -> Unit, onDone: () -> Unit,
+    modifier: Modifier,
+) {
+    Column(
+        modifier
+            .widthIn(max = 360.dp)
+            .fillMaxWidth(0.45f)
+            .clip(RoundedCornerShape(14.dp))
+            .background(Color(0xE6181A1D))
+            .border(1.dp, Hk.border, RoundedCornerShape(14.dp))
+            .padding(14.dp),
+    ) {
+        Text(
+            selection?.label ?: "Drag a control to move it",
+            fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Hk.text,
+        )
+        if (selection != null) {
+            SliderRow("Size", size, TouchControlsView.MIN_GROUP_SIZE..TouchControlsView.MAX_GROUP_SIZE, onSize)
+        } else {
+            Text("Tap a control to resize it. Changes are saved as you go.", fontSize = 12.sp, color = Hk.textMuted, modifier = Modifier.padding(top = 4.dp))
+        }
+        Spacer(Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            SecondaryButton("Reset", onClick = onReset, modifier = Modifier.weight(1f))
+            PrimaryButton("Done", onClick = onDone, modifier = Modifier.weight(1f).height(46.dp))
         }
     }
 }
