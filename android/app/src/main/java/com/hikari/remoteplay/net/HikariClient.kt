@@ -114,7 +114,9 @@ class HikariClient(private val clientName: String, private val displayHz: Int, p
     private var nextResolve = 0L
 
     private val assembler = FrameAssembler()
-    val frames = ArrayBlockingQueue<AssembledFrame>(8)
+    // Short on purpose: a frame waiting here is latency. When it fills, the
+    // backlog is flushed and the stream restarts from a keyframe.
+    val frames = ArrayBlockingQueue<AssembledFrame>(4)
 
     val clock = ClockSync()
     private var pingSeq = 0

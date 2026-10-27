@@ -74,18 +74,31 @@ class MainActivity : ComponentActivity() {
             window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             controller.hide(WindowInsetsCompat.Type.systemBars())
-            // Use the area around cutouts too: the controls hug the screen edges.
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                window.attributes = window.attributes.apply {
+            window.attributes = window.attributes.apply {
+                // Use the area around cutouts too: the controls hug the screen edges.
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                     layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
                 }
+                // Run the panel at its fastest refresh rate: a new frame reaches the glass sooner.
+                preferredDisplayModeId = fastestDisplayMode()
             }
         } else {
             requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
             window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             controller.show(WindowInsetsCompat.Type.systemBars())
+            window.attributes = window.attributes.apply { preferredDisplayModeId = 0 }
         }
     }
+
+    // The highest refresh rate at the current resolution (0 = let the system choose).
+    private fun fastestDisplayMode(): Int = runCatching {
+        @Suppress("DEPRECATION")
+        val display = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) display!! else windowManager.defaultDisplay
+        val now = display.mode
+        display.supportedModes
+            .filter { it.physicalWidth == now.physicalWidth && it.physicalHeight == now.physicalHeight }
+            .maxByOrNull { it.refreshRate }?.modeId ?: 0
+    }.getOrDefault(0)
 
     override fun onStart() {
         super.onStart()
