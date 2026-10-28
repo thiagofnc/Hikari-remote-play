@@ -172,7 +172,9 @@ bool choose_capture_mode(const CaptureDeviceInfo& dev, UINT32 want_w, UINT32 wan
         const double res = std::fabs(double(m.width) * m.height - double(want_w) * want_h) / (double(want_w) * want_h);
         const double fps_short = std::max(0.0, want_fps - m.fps() - 0.5);
         const double fps_over = std::max(0.0, m.fps() - want_fps - 0.5);
-        const double cost = res * 1000 + fps_short * 100 + fps_over * 2 + format_rank(m.subtype, pref);
+        // A mode with another shape (e.g. 1280x1024 for a 16:9 source) squashes the picture.
+        const double aspect = m.height ? std::fabs(double(m.width) / m.height * want_h / want_w - 1.0) : 1.0;
+        const double cost = res * 1000 + aspect * 2000 + fps_short * 100 + fps_over * 2 + format_rank(m.subtype, pref);
         if (cost < best_cost) {
             best_cost = cost;
             best = &m;

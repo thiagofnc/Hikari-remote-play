@@ -477,6 +477,12 @@ bool HostApp::open_capture()
         capture_ok_ = false;
         return false;
     }
+    if (mode.width != 1920 || mode.height != 1080 || mode.fps() < 59) {
+        std::string all;
+        for (const auto& m : pick->modes) all += "\n    " + m.to_string();
+        HK_LOGW("%s has no usable 1920x1080 at 60 fps mode; using %s. Modes offered:%s", pick->name.c_str(),
+                mode.to_string().c_str(), all.c_str());
+    }
     capture_.set_upload(streaming_.load());
     capture_.set_frame_callback([this](CapturedFrame&& f) { on_captured(std::move(f)); });
     if (!capture_.open(gpu_, *pick, mode)) {
