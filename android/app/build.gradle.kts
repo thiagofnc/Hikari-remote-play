@@ -5,7 +5,7 @@ plugins {
 }
 
 // Release builds pass -PhikariVersion=1.2.3 (from the tag); versionCode follows it.
-val hikariVersion = (findProperty("hikariVersion") as String?) ?: "0.1.11"
+val hikariVersion = (findProperty("hikariVersion") as String?) ?: "0.1.12"
 val hikariVersionCode = hikariVersion.substringBefore('-').split('.').map { it.toIntOrNull() ?: 0 }
     .let { (it.getOrElse(0) { 0 } * 10000) + (it.getOrElse(1) { 0 } * 100) + it.getOrElse(2) { 0 } }
 
