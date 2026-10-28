@@ -72,6 +72,8 @@ public:
     void connect(const std::string& host, const std::string& pairing_code, proto::Preset preset,
                  uint32_t max_kbps, const std::string& fallback = "");
     void disconnect();
+    // Video codecs this client can decode (Hello bits); set before connect().
+    void set_video_codecs(uint8_t bits) { video_codecs_ = bits; }
     ConnState state() const { return state_.load(); }
     std::string remote_ip();    // address currently used, without port ("" if none)
     std::string host_name();    // as announced by the host in Welcome
@@ -122,6 +124,7 @@ private:
     crypto::Digest psk_{};
     proto::Preset preset_ = proto::Preset::Balanced;
     uint32_t max_kbps_ = 0;
+    uint8_t video_codecs_ = 1;  // Hello bits: bit0 H.264, bit1 HEVC
     bool want_connect_ = false;
     bool target_changed_ = false;
     uint32_t session_ = 0;

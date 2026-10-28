@@ -108,8 +108,12 @@ TEST(loopback_probe_takeover_fallback_and_new_code)
     const std::string code = crypto::generate_pairing_code();
     const uint8_t id[8] = {8, 7, 6, 5, 4, 3, 2, 1};
     std::atomic<int> connects{0};
+    std::atomic<int> codecs{0};
     HostNetEvents events;
-    events.connected = [&](const std::string&, proto::Preset, uint32_t) { ++connects; };
+    events.connected = [&](const std::string&, proto::Preset, uint32_t, uint8_t video_codecs) {
+        codecs = video_codecs;
+        ++connects;
+    };
     HostNet host;
     uint16_t port = 0;
     for (int attempt = 0; attempt < 20 && !port; ++attempt) {
@@ -122,9 +126,11 @@ TEST(loopback_probe_takeover_fallback_and_new_code)
 
     ClientNet first;
     CHECK(first.start({}));
+    first.set_video_codecs(3);  // a PC that decodes HEVC
     first.connect(address, code, proto::Preset::Balanced, 0);
     CHECK(wait_for([&] { return first.state() == ConnState::Connected; }));
     CHECK(first.host_name() == "Loopback");
+    CHECK_EQ(codecs.load(), 3);
 
     // A pairing check from Settings must not disturb the session in progress.
     const ProbeOutcome ok = probe_host({address}, code);
@@ -147,6 +153,7 @@ TEST(loopback_probe_takeover_fallback_and_new_code)
     CHECK(first.state() == ConnState::Replaced);  // no tug-of-war
     CHECK(second.state() == ConnState::Connected);
     CHECK_EQ(connects.load(), 2);
+    CHECK_EQ(codecs.load(), 1);  // the new client only offered H.264
 
     // A new pairing code applies immediately, without restarting the host.
     const std::string code2 = crypto::generate_pairing_code();

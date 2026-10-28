@@ -26,7 +26,8 @@
 namespace hikari {
 
 struct HostNetEvents {
-    std::function<void(const std::string& client_name, proto::Preset, uint32_t max_kbps)> connected;
+    // video_codecs: Hello bits, bit0 H.264, bit1 HEVC.
+    std::function<void(const std::string& client_name, proto::Preset, uint32_t max_kbps, uint8_t video_codecs)> connected;
     std::function<void()> disconnected;
     std::function<void(const proto::Input&, uint64_t rx_us)> input;  // runs on net-rx: keep it fast
     std::function<void(uint8_t reason)> keyframe_request;

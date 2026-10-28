@@ -152,8 +152,12 @@ bool HostApp::start(Config& cfg)
                   cfg.get("host", "controller_type", "pro") == "hori" ? HK_PROFILE_HORI_PAD : HK_PROFILE_PRO_CONTROLLER);
 
     HostNetEvents ev;
-    ev.connected = [this](const std::string&, proto::Preset preset, uint32_t max_kbps) {
+    ev.connected = [this](const std::string&, proto::Preset preset, uint32_t max_kbps, uint8_t video_codecs) {
         client_gone_at_ = 0;
+        // A client that changes the usable codec (e.g. the phone taking over
+        // from a PC) needs the encoder reopened before it gets a frame.
+        const bool hevc = (video_codecs & 2) != 0;
+        if (client_hevc_.exchange(hevc) != hevc && streaming_) want_reconfigure_ = true;
         apply_preset(preset, max_kbps);
         if (streaming_) {
             encoder_.request_keyframe();  // reconnect inside the grace period: resume instantly
@@ -306,6 +310,8 @@ void HostApp::redetect_devices()
 {
     cfg_->set("host", "encoder", "");
     cfg_->set("host", "encoder_gpu", "");
+    cfg_->set("host", "encoder_hevc", "");
+    cfg_->set("host", "encoder_hevc_gpu", "");
     cfg_->save();
     capture_ok_ = false;
     last_capture_retry_us_ = 0;
@@ -344,7 +350,8 @@ void HostApp::apply_preset(proto::Preset p, uint32_t max_kbps)
 
 bool HostApp::select_encoder()
 {
-    const GUID codec = cfg_->get("host", "codec", "h264") == "hevc" ? MFVideoFormat_HEVC : MFVideoFormat_H264;
+    // H.264 is what every client decodes; HEVC is an extra (select_hevc_encoder).
+    const GUID codec = MFVideoFormat_H264;
     const std::string cached = cfg_->get("host", "encoder");
     const std::string cached_gpu = cfg_->get("host", "encoder_gpu");
     auto adapters = enumerate_adapters();
@@ -402,6 +409,46 @@ bool HostApp::select_encoder()
     cfg_->save();
     HK_LOGI("Selected encoder: %s on %s", best_name.c_str(), gpu_.adapter_name.c_str());
     return encoder_index_ >= 0;
+}
+
+// HEVC is a second encoder on the GPU picked for H.264, used only for clients
+// that offer it. host.codec = h264 turns it off.
+void HostApp::select_hevc_encoder()
+{
+    hevc_encoders_.clear();
+    hevc_index_ = -1;
+    if (encoder_index_ < 0 || cfg_->get("host", "codec", "auto") == "h264") return;
+    const std::string cached = cfg_->get("host", "encoder_hevc");
+    if (!cached.empty() && cfg_->get("host", "encoder_hevc_gpu") == gpu_.adapter_name) {
+        if (cached == "none") return;
+        hevc_encoders_ = encoders_for(gpu_, MFVideoFormat_HEVC);
+        for (size_t i = 0; i < hevc_encoders_.size(); ++i)
+            if (hevc_encoders_[i].name == cached) hevc_index_ = static_cast<int>(i);
+        if (hevc_index_ >= 0) return;
+    }
+
+    benchmarking_ = true;
+    EncoderConfig bench;
+    bench.codec = MFVideoFormat_HEVC;
+    std::string best;
+    {
+        auto encs = encoders_for(gpu_, MFVideoFormat_HEVC);
+        const int idx = select_best_encoder(gpu_, encs, bench, nullptr);
+        if (idx >= 0) best = encs[static_cast<size_t>(idx)].name;
+    }
+    benchmarking_ = false;
+    if (!best.empty()) {
+        hevc_encoders_ = encoders_for(gpu_, MFVideoFormat_HEVC);
+        for (size_t i = 0; i < hevc_encoders_.size(); ++i)
+            if (hevc_encoders_[i].name == best) hevc_index_ = static_cast<int>(i);
+    }
+    cfg_->set("host", "encoder_hevc", hevc_index_ >= 0 ? best : "none");
+    cfg_->set("host", "encoder_hevc_gpu", gpu_.adapter_name);
+    cfg_->save();
+    if (hevc_index_ >= 0)
+        HK_LOGI("HEVC encoder: %s (for clients that decode HEVC)", best.c_str());
+    else
+        HK_LOGI("No hardware HEVC encoder keeps up at 1080p60 on %s; streaming H.264 only", gpu_.adapter_name.c_str());
 }
 
 bool HostApp::open_capture()
@@ -463,6 +510,7 @@ void HostApp::setup_thread()
     set_thread_role(ThreadRole::Background, "hikari-setup");
     CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     if (!select_encoder()) encoder_index_ = -1;
+    select_hevc_encoder();
     gpu_ready_ = true;
     if (!open_capture()) HK_LOGW("No HDMI capture card found yet; will keep looking");
     last_capture_retry_us_ = now_us();
@@ -491,6 +539,8 @@ void HostApp::on_captured(CapturedFrame&& f)
 
 void HostApp::on_encoded(EncodedFrame&& f)
 {
+    // Frames still in flight when an H.264-only client took over.
+    if (encoder_.config().codec == MFVideoFormat_HEVC && !client_hevc_.load(std::memory_order_relaxed)) return;
     encode_fps_.add();
     last_encoded_us_.store(now_us(), std::memory_order_relaxed);
     OutgoingFrame o;
@@ -523,7 +573,9 @@ bool HostApp::recover_gpu()
     capture_ok_ = false;
 
     const std::string encoder_name = encoder_index_ >= 0 ? encoders_[static_cast<size_t>(encoder_index_)].name : cfg_->get("host", "encoder");
+    const std::string hevc_name = hevc_index_ >= 0 ? hevc_encoders_[static_cast<size_t>(hevc_index_)].name : std::string();
     encoder_index_ = -1;
+    hevc_index_ = -1;
     ComPtr<IDXGIAdapter1> same;
     for (auto& a : enumerate_adapters()) {
         DXGI_ADAPTER_DESC1 d;
@@ -534,14 +586,19 @@ bool HostApp::recover_gpu()
         HK_LOGE("Could not recreate the GPU device");
         return false;
     }
-    const GUID codec = cfg_->get("host", "codec", "h264") == "hevc" ? MFVideoFormat_HEVC : MFVideoFormat_H264;
-    encoders_ = encoders_for(gpu_, codec);
+    encoders_ = encoders_for(gpu_, MFVideoFormat_H264);
     for (size_t i = 0; i < encoders_.size(); ++i)
         if (encoders_[i].name == encoder_name) encoder_index_ = static_cast<int>(i);
     if (encoder_index_ < 0) {
         HK_LOGE("Encoder \"%s\" is gone after the GPU reset", encoder_name.c_str());
         return false;
     }
+    if (!hevc_name.empty()) {
+        hevc_encoders_ = encoders_for(gpu_, MFVideoFormat_HEVC);
+        for (size_t i = 0; i < hevc_encoders_.size(); ++i)
+            if (hevc_encoders_[i].name == hevc_name) hevc_index_ = static_cast<int>(i);
+    }
+    hevc_failed_ = false;
     last_capture_retry_us_ = 0;  // the orchestrator reopens the capture card right away
     gpu_ready_ = true;
     wake_.set();
@@ -583,6 +640,10 @@ void HostApp::encoder_thread()
 
         if (!encoder_.is_open() || want_reconfigure_.load() || encoder_.failed()) {
             if (now_us() < retry_at) continue;
+            if (encoder_.failed() && encoder_.config().codec == MFVideoFormat_HEVC && !hevc_failed_) {
+                HK_LOGW("HEVC encoder failed mid-stream; using H.264 from now on");
+                hevc_failed_ = true;
+            }
             want_reconfigure_ = false;
             AbrDecision d;
             proto::Preset preset;
@@ -591,8 +652,11 @@ void HostApp::encoder_thread()
                 d = abr_now_;
                 preset = preset_;
             }
+            const bool hevc = client_hevc_ && hevc_index_ >= 0 && !hevc_failed_;
+            const EncoderInfo& info = hevc ? hevc_encoders_[static_cast<size_t>(hevc_index_)]
+                                           : encoders_[static_cast<size_t>(encoder_index_)];
             EncoderConfig ec;
-            ec.codec = cfg_->get("host", "codec", "h264") == "hevc" ? MFVideoFormat_HEVC : MFVideoFormat_H264;
+            ec.codec = hevc ? MFVideoFormat_HEVC : MFVideoFormat_H264;
             ec.width = d.mode.width;
             ec.height = d.mode.height;
             ec.fps = d.mode.fps;
@@ -604,8 +668,12 @@ void HostApp::encoder_thread()
             }
             abr_fps_ = ec.fps;
             const bool ok = converter_ready_ &&
-                            encoder_.open(gpu_, encoders_[static_cast<size_t>(encoder_index_)], ec,
-                                          [this](EncodedFrame&& f) { on_encoded(std::move(f)); });
+                            encoder_.open(gpu_, info, ec, [this](EncodedFrame&& f) { on_encoded(std::move(f)); });
+            if (!ok && hevc) {
+                HK_LOGW("HEVC encoder did not open; using H.264 from now on");
+                hevc_failed_ = true;
+                continue;
+            }
             if (!ok) {
                 ++failures;
                 retry_at = now_us() + 1'000'000;

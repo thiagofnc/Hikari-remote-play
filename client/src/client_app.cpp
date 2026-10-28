@@ -160,6 +160,11 @@ int ClientApp::run(Config& cfg, ClientHooks hooks)
         MessageBoxW(nullptr, L"Hikari needs a DirectX 11 GPU with hardware video decoding.", L"Hikari", MB_ICONERROR);
         return 1;
     }
+    // HEVC looks noticeably better at the same bitrate; the host only sends it
+    // to clients that offer it, so other clients keep getting H.264.
+    const bool hevc = cfg.get_bool("client", "hevc", true) && hevc_decode_supported(gpu_);
+    net_.set_video_codecs(hevc ? 3 : 1);
+    HK_LOGI("Video codecs offered: %s", hevc ? "HEVC, H.264" : "H.264");
 
     WNDCLASSEXW wc{sizeof(wc)};
     wc.lpfnWndProc = client_wndproc;

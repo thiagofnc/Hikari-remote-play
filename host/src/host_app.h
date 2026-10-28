@@ -115,6 +115,7 @@ private:
 
     void setup_thread();
     bool select_encoder();
+    void select_hevc_encoder();
     bool open_capture();
     bool recover_gpu();
     void encoder_thread();
@@ -154,6 +155,10 @@ private:
     std::atomic<bool> gpu_ready_{false};
     std::vector<EncoderInfo> encoders_;
     int encoder_index_ = -1;
+    std::vector<EncoderInfo> hevc_encoders_;  // same GPU as encoders_; empty when HEVC is off
+    int hevc_index_ = -1;
+    std::atomic<bool> client_hevc_{false};  // connected client offered HEVC
+    std::atomic<bool> hevc_failed_{false};  // HEVC broke this run: H.264 only
     std::atomic<bool> benchmarking_{false};
 
     VideoCapture capture_;

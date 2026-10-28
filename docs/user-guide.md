@@ -169,6 +169,7 @@ How the client presents frames. Cycle it any time with <kbd>F2</kbd>:
 | Windows Firewall / Lid closed | Shown in **Always reachable** with a one-click fix when needed. |
 | Pairing code | Show, copy as an invite, or regenerate. A new code applies immediately and un-pairs all clients. |
 | Re-detect hardware | Re-runs capture, audio and encoder detection (e.g. after a driver update or new capture card). |
+| Video codec | **HEVC** for clients that can decode it in hardware (most PCs from the last several years), **H.264** for everyone else, including the Android app. HEVC looks noticeably sharper at the same bitrate. The host picks per client automatically; the stats overlay (<kbd>F1</kbd>) shows which one is in use. Set `[host] codec=h264` to turn HEVC off on the host, or `[client] hevc=false` to stop one PC from asking for it. HEVC on a PC client needs Microsoft's *HEVC Video Extensions* (often preinstalled; otherwise from the Microsoft Store). |
 | Audio codec | Opus when built with Opus support; otherwise PCM. Set `[host] audio_opus=false` in `hikari.ini` to prefer PCM. No codec selector is available yet. |
 
 ### Where settings live

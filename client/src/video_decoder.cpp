@@ -12,6 +12,30 @@
 
 namespace hikari {
 
+namespace {
+// D3D11_DECODER_PROFILE_HEVC_VLD_MAIN (not declared by every SDK).
+const GUID kHevcVldMain = {0x5b11d51b, 0x2f4c, 0x4452, {0xbc, 0xc3, 0x09, 0xf2, 0xa1, 0x16, 0x0c, 0xc0}};
+}  // namespace
+
+bool hevc_decode_supported(GpuDevice& gpu)
+{
+    MFT_REGISTER_TYPE_INFO in{MFMediaType_Video, MFVideoFormat_HEVC};
+    MFT_REGISTER_TYPE_INFO out{MFMediaType_Video, MFVideoFormat_NV12};
+    IMFActivate** acts = nullptr;
+    UINT32 n = 0;
+    if (FAILED(MFTEnumEx(MFT_CATEGORY_VIDEO_DECODER, MFT_ENUM_FLAG_SYNCMFT | MFT_ENUM_FLAG_SORTANDFILTER, &in, &out, &acts,
+                         &n)))
+        n = 0;
+    for (UINT32 i = 0; i < n; ++i) acts[i]->Release();
+    CoTaskMemFree(acts);
+    if (n == 0) return false;
+
+    ComPtr<ID3D11VideoDevice> vdev;
+    if (!gpu.device || FAILED(gpu.device.As(&vdev))) return false;
+    BOOL ok = FALSE;
+    return SUCCEEDED(vdev->CheckVideoDecoderFormat(&kHevcVldMain, DXGI_FORMAT_NV12, &ok)) && ok;
+}
+
 VideoDecoder::~VideoDecoder() { close(); }
 
 void VideoDecoder::close()

@@ -270,7 +270,8 @@ Hikari-remote-play/
 - [x] Network protocol, FEC transport, ABR, pairing/authentication core
 - [ ] `Hikari.exe` Host/Client app, first public release
 - [ ] **Pro Controller profile** with gyro (motion controls)
-- [ ] **HEVC / AV1** where they are measurably faster or better at the same latency
+- [x] **HEVC** for clients that decode it in hardware (H.264 for the rest)
+- [ ] **AV1** where it is measurably better at the same latency
 - [ ] **Mobile client** (Android first)
 - [ ] **Direct NAT traversal** (play without a VPN overlay)
 - [ ] HDMI-CEC wake as another non-invasive wake method

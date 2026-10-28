@@ -255,6 +255,7 @@ void ClientNet::handshake_step(uint64_t now)
         std::snprintf(h.client_name, sizeof(h.client_name), "%s", computer_name().c_str());
         h.preset = preset_;
         h.max_bitrate_kbps = max_kbps_;
+        h.video_codecs = video_codecs_;
 #ifdef HIKARI_WITH_OPUS
         h.audio_codecs = 3;
 #else

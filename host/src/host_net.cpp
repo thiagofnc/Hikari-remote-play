@@ -440,7 +440,7 @@ void HostNet::handle_auth(ByteReader& r, const NetAddress& from, uint64_t now)
     connected_ = true;
     HK_LOGI("Client \"%s\" connected from %s%s", p.hello.client_name, from.to_string().c_str(),
             previous ? (" (took over from \"" + previous->name + "\")").c_str() : "");
-    if (ev_.connected) ev_.connected(p.hello.client_name, p.hello.preset, p.hello.max_bitrate_kbps);
+    if (ev_.connected) ev_.connected(p.hello.client_name, p.hello.preset, p.hello.max_bitrate_kbps, p.hello.video_codecs);
 }
 
 void HostNet::tx_loop()

@@ -21,6 +21,11 @@ struct DecodedFrame {
     uint64_t decode_us = 0;
 };
 
+// True when HEVC can be decoded on this GPU in hardware: a Media Foundation
+// HEVC decoder is installed (HEVC Video Extensions) and the GPU decodes HEVC
+// Main itself. Software HEVC at 1080p60 would cost more latency than it saves.
+bool hevc_decode_supported(GpuDevice& gpu);
+
 class VideoDecoder {
 public:
     ~VideoDecoder();
