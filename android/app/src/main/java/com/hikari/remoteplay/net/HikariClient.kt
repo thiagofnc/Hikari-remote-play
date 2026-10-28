@@ -77,7 +77,7 @@ interface ClientNetListener {
     fun onAudio(packet: AudioPacket) {}  // RX thread
 }
 
-class HikariClient(private val clientName: String, private val displayHz: Int, private val audioCodecs: Int) {
+class HikariClient(private val clientName: String, private val displayHz: Int, private val audioCodecs: Int, private val videoCodecs: Int) {
 
     @Volatile var listener: ClientNetListener? = null
 
@@ -354,7 +354,7 @@ class HikariClient(private val clientName: String, private val displayHz: Int, p
             val w = ByteWriter(buf)
             if (!haveChallenge) {
                 writeHeader(w, PacketType.HELLO, 0)
-                Hello(clientNonce, clientName, preset, maxKbps, 1, audioCodecs, displayHz).write(w)
+                Hello(clientNonce, clientName, preset, maxKbps, videoCodecs, audioCodecs, displayHz).write(w)
             } else {
                 writeHeader(w, PacketType.AUTH, 0)
                 writeAuth(w, clientNonce, hostNonce, HikariCrypto.authMac(psk, clientNonce, hostNonce))

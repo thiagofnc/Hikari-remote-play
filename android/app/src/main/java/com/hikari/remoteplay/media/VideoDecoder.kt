@@ -111,7 +111,8 @@ class VideoDecoder(private val net: HikariClient) {
         release()
         val s = surface ?: return false
         return try {
-            val c = MediaCodec.createDecoderByType(mime())
+            val hw = if (codecType == VideoCodec.HEVC) hevcDecoder else null
+            val c = if (hw != null) MediaCodec.createByCodecName(hw) else MediaCodec.createDecoderByType(mime())
             decoderName = c.name
             val fmt = MediaFormat.createVideoFormat(mime(), width, height)
             csd.forEachIndexed { i, b -> fmt.setByteBuffer("csd-$i", ByteBuffer.wrap(b)) }
@@ -317,5 +318,23 @@ class VideoDecoder(private val net: HikariClient) {
                 !info.isEncoder && info.supportedTypes.any { it.equals(mime, ignoreCase = true) }
             }
         }.getOrDefault(false)
+
+        // HEVC is offered to the host only when a hardware decoder handles
+        // 1080p60; software HEVC would add far more latency than it saves.
+        val hevcDecoder: String? by lazy { hardwareDecoder(MediaFormat.MIMETYPE_VIDEO_HEVC) }
+
+        private fun hardwareDecoder(mime: String): String? = runCatching {
+            android.media.MediaCodecList(android.media.MediaCodecList.REGULAR_CODECS).codecInfos.firstOrNull { info: MediaCodecInfo ->
+                val type = info.supportedTypes.firstOrNull { it.equals(mime, ignoreCase = true) }
+                type != null && !info.isEncoder && isHardware(info) &&
+                    info.getCapabilitiesForType(type).videoCapabilities?.areSizeAndRateSupported(1920, 1080, 60.0) == true
+            }?.name
+        }.getOrNull()
+
+        private fun isHardware(info: MediaCodecInfo): Boolean {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) return info.isHardwareAccelerated && !info.isSoftwareOnly
+            val n = info.name.lowercase()
+            return !n.startsWith("omx.google.") && !n.startsWith("c2.android.") && !n.contains(".sw.")
+        }
     }
 }

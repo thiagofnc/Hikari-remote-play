@@ -16,7 +16,7 @@ class LiveHostTest {
         val text = System.getenv("HIKARI_LIVE_INVITE")
         assumeTrue(text != null)
         val inv = Invite.parse(text!!)!!
-        val client = HikariClient("Hikari live test", 60, 1)
+        val client = HikariClient("Hikari live test", 60, 1, 1)
         val log = { s: String -> println("[%6.2f] %s".format((System.nanoTime() - t0) / 1e9, s)) }
         var last: HostStatus? = null
         client.listener = object : ClientNetListener {

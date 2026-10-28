@@ -47,7 +47,8 @@ class Session(private val context: Context) : ClientNetListener {
         (context.getSystemService(Context.WINDOW_SERVICE) as android.view.WindowManager).defaultDisplay.refreshRate.toInt()
     }.getOrDefault(60).coerceIn(30, 240)
 
-    val client = HikariClient(deviceName, displayHz, if (AudioPlayer.opusSupported) 3 else 1)
+    val client = HikariClient(deviceName, displayHz, if (AudioPlayer.opusSupported) 3 else 1,
+                              if (VideoDecoder.hevcDecoder != null) 3 else 1)
     val decoder = VideoDecoder(client)
     val audio = AudioPlayer()
     val input = InputSender(client)
