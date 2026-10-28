@@ -454,9 +454,9 @@ Smoothing: loss uses fast attack (α = 0.5) and slow release (α = 0.15). Queuei
 
 | Preset | Start | Max | Queueing-delay limit |
 | --- | --- | --- | --- |
-| Minimum Latency | 10 Mbps | 15 Mbps | 6 ms |
-| Balanced | 12 Mbps | 20 Mbps | 12 ms |
-| Quality | 18 Mbps | 35 Mbps | 25 ms |
+| Minimum Latency | 12 Mbps | 20 Mbps | 6 ms |
+| Balanced | 16 Mbps | 30 Mbps | 12 ms |
+| Quality | 25 Mbps | 50 Mbps | 25 ms |
 
 The client's `Hello.max_bitrate_kbps` further caps the max. The floor is 2 Mbps.
 
@@ -475,9 +475,9 @@ FEC turns on or strengthens immediately, but only turns off after 5 s of clean r
 
 | Step | Mode | Step down when bitrate stays below | for |
 | --- | --- | --- | --- |
-| 0 | 1080p60 (native) | 7 Mbps | 3 s |
-| 1 | 900p60 | 5 Mbps | 3 s |
-| 2 | 720p60 | 2.8 Mbps | 3 s |
+| 0 | 1080p60 (native) | 5 Mbps | 3 s |
+| 1 | 900p60 | 3.5 Mbps | 3 s |
+| 2 | 720p60 | 2.5 Mbps | 3 s |
 | 3 | 720p30 | — | — |
 
 Stepping back **up** requires the bitrate to exceed 1.4 × the threshold of the step above for 6 s. Widths are scaled from the native aspect ratio and rounded to a multiple of 16. Each mode change is announced with `StreamConfig` and starts with an IDR.

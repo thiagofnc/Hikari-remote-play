@@ -78,11 +78,13 @@ double spread_for(proto::Preset p)
 UINT quality_for(proto::Preset p)
 {
     switch (p) {
+    // Hardware encoders finish 1080p well inside a frame even at their better
+    // settings, which buy visibly finer detail at the same bitrate.
     case proto::Preset::MinimumLatency: return 0;
-    case proto::Preset::Balanced: return 33;
-    case proto::Preset::Quality: return 66;
+    case proto::Preset::Balanced: return 50;
+    case proto::Preset::Quality: return 80;
     }
-    return 33;
+    return 50;
 }
 
 }  // namespace

@@ -6,15 +6,17 @@ namespace hikari {
 
 namespace {
 // Steps relative to the native mode. Frame rate drops only as a last resort.
+// Native 1080p is held down to 5 Mbps: a softer 1080p picture still looks
+// sharper on the client than an upscaled 900p one.
 struct Step {
     uint16_t h;
     uint16_t fps;
     uint32_t min_kbps;  // step down when bitrate stays below this
 };
 constexpr Step kLadder[] = {
-    {1080, 60, 7000},
-    {900, 60, 5000},
-    {720, 60, 2800},
+    {1080, 60, 5000},
+    {900, 60, 3500},
+    {720, 60, 2500},
     {720, 30, 0},
 };
 }  // namespace
@@ -24,18 +26,18 @@ AbrConfig AdaptiveBitrate::preset_config(proto::Preset p, uint32_t client_max_kb
     AbrConfig c;
     switch (p) {
     case proto::Preset::MinimumLatency:
-        c.start_kbps = 10000;
-        c.max_kbps = 15000;
+        c.start_kbps = 12000;
+        c.max_kbps = 20000;
         c.queue_delay_limit_us = 6000;
         break;
     case proto::Preset::Balanced:
-        c.start_kbps = 12000;
-        c.max_kbps = 20000;
+        c.start_kbps = 16000;
+        c.max_kbps = 30000;
         c.queue_delay_limit_us = 12000;
         break;
     case proto::Preset::Quality:
-        c.start_kbps = 18000;
-        c.max_kbps = 35000;
+        c.start_kbps = 25000;
+        c.max_kbps = 50000;
         c.queue_delay_limit_us = 25000;
         break;
     }

@@ -184,6 +184,7 @@ Your controller acts as the Switch controller. Remap anything in **Settings → 
 | <kbd>F11</kbd> / <kbd>Alt</kbd>+<kbd>Enter</kbd> | Toggle fullscreen |
 | <kbd>F1</kbd> | Stats overlay |
 | <kbd>F2</kbd> | Cycle display mode (Minimum Latency → Balanced → Smooth) |
+| <kbd>F3</kbd> | Fill the whole screen (stretch) or keep 16:9 |
 | <kbd>F8</kbd> | Send **HOME** |
 | <kbd>F9</kbd> | Send **Capture** |
 | <kbd>F12</kbd> | Screenshot |

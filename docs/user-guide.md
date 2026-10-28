@@ -100,6 +100,7 @@ To leave the stream, press <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Q</kbd> to go bac
 | <kbd>F11</kbd> or <kbd>Alt</kbd>+<kbd>Enter</kbd> | Toggle fullscreen |
 | <kbd>F1</kbd> | Stats overlay |
 | <kbd>F2</kbd> | Cycle display mode: Minimum Latency → Balanced → Smooth |
+| <kbd>F3</kbd> | Fill the whole screen (stretch) or keep the 16:9 shape |
 | <kbd>F8</kbd> | Send **HOME** to the console |
 | <kbd>F9</kbd> | Send **Capture** (console screenshot) |
 | <kbd>F12</kbd> | Save a screenshot of the stream on this PC |
