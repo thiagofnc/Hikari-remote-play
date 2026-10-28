@@ -6,17 +6,17 @@ namespace hikari {
 
 namespace {
 // Steps relative to the native mode. Frame rate drops only as a last resort.
-// Native 1080p is held down to 5 Mbps: a softer 1080p picture still looks
-// sharper on the client than an upscaled 900p one.
 struct Step {
     uint16_t h;
     uint16_t fps;
     uint32_t min_kbps;  // step down when bitrate stays below this
 };
+// Full resolution holds down to a lower bitrate than it used to: a softer
+// 1080p picture still looks better than an upscaled 900p one.
 constexpr Step kLadder[] = {
     {1080, 60, 5000},
     {900, 60, 3500},
-    {720, 60, 2500},
+    {720, 60, 2000},
     {720, 30, 0},
 };
 }  // namespace
@@ -36,7 +36,7 @@ AbrConfig AdaptiveBitrate::preset_config(proto::Preset p, uint32_t client_max_kb
         c.queue_delay_limit_us = 12000;
         break;
     case proto::Preset::Quality:
-        c.start_kbps = 25000;
+        c.start_kbps = 24000;
         c.max_kbps = 50000;
         c.queue_delay_limit_us = 25000;
         break;
@@ -115,7 +115,7 @@ AbrDecision AdaptiveBitrate::on_report(const proto::ReceiverReport& r, uint64_t 
         if (!clean_since_) clean_since_ = now;
         // Probe upward gently after one clean second, at most every 500 ms.
         if (now - clean_since_ > 1'000'000 && now - last_increase_ > 500'000 && now - last_decrease_ > 2'000'000) {
-            bitrate_ = std::min<double>(cfg_.max_kbps, bitrate_ * 1.06 + 200);
+            bitrate_ = std::min<double>(cfg_.max_kbps, bitrate_ * 1.08 + 300);
             last_increase_ = now;
         }
     } else {

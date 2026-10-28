@@ -324,6 +324,7 @@ void ClientApp::set_screen(Screen s)
 {
     if (screen_.exchange(s) == s) return;
     if (s == Screen::Stream) {
+        fit_window_to_stream();
         toast(mouse_aim_enabled() ? "Stream menu: Ctrl+Alt+M, or hold Minus and Plus     Controls: Ctrl+Alt+C     Click  mouse aim"
                                   : "Stream menu: Ctrl+Alt+M, or hold Minus and Plus     Controls: Ctrl+Alt+C",
               5.0);
@@ -331,8 +332,49 @@ void ClientApp::set_screen(Screen s)
         ended_by_user_ = false;
     } else {
         menu_open_ = false;
+        restore_lobby_window();
     }
     update_sending();
+}
+
+// A windowed stream gets the largest client area of the picture's shape that
+// fits the monitor, so there are no bars and no wasted space. Leaving the
+// stream puts the lobby window back where it was.
+void ClientApp::fit_window_to_stream()
+{
+    if (fullscreen_ || IsZoomed(hwnd_) || IsIconic(hwnd_)) return;
+    double aspect = 16.0 / 9.0;
+    {
+        std::lock_guard<std::mutex> lk(mu_);
+        if (stream_.width && stream_.height) aspect = double(stream_.width) / stream_.height;
+    }
+    MONITORINFO mi{sizeof(mi)};
+    GetMonitorInfoW(MonitorFromWindow(hwnd_, MONITOR_DEFAULTTONEAREST), &mi);
+    const RECT& wa = mi.rcWork;
+    RECT frame{0, 0, 0, 0};
+    AdjustWindowRectExForDpi(&frame, static_cast<DWORD>(GetWindowLongW(hwnd_, GWL_STYLE)), FALSE, 0, GetDpiForWindow(hwnd_));
+    const int fw = frame.right - frame.left, fh = frame.bottom - frame.top;
+    int cw = (wa.right - wa.left) - fw;
+    int ch = static_cast<int>(cw / aspect + 0.5);
+    if (ch > (wa.bottom - wa.top) - fh) {
+        ch = (wa.bottom - wa.top) - fh;
+        cw = static_cast<int>(ch * aspect + 0.5);
+    }
+    if (cw <= 0 || ch <= 0) return;
+    GetWindowRect(hwnd_, &lobby_rect_);
+    have_lobby_rect_ = true;
+    const int w = cw + fw, h = ch + fh;
+    SetWindowPos(hwnd_, nullptr, wa.left + (wa.right - wa.left - w) / 2, wa.top + (wa.bottom - wa.top - h) / 2, w, h,
+                 SWP_NOZORDER | SWP_NOACTIVATE);
+}
+
+void ClientApp::restore_lobby_window()
+{
+    if (!have_lobby_rect_) return;
+    have_lobby_rect_ = false;
+    if (fullscreen_ || IsZoomed(hwnd_) || IsIconic(hwnd_)) return;
+    SetWindowPos(hwnd_, nullptr, lobby_rect_.left, lobby_rect_.top, lobby_rect_.right - lobby_rect_.left,
+                 lobby_rect_.bottom - lobby_rect_.top, SWP_NOZORDER | SWP_NOACTIVATE);
 }
 
 bool ClientApp::mouse_aim_enabled()

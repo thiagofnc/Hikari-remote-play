@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.DashPathEffect
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
@@ -15,7 +16,6 @@ import android.view.View
 import com.hikari.remoteplay.proto.Btn
 import com.hikari.remoteplay.proto.PadState
 import kotlin.math.abs
-import kotlin.math.atan2
 import kotlin.math.hypot
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -25,12 +25,43 @@ import kotlin.math.roundToInt
 // Every touch is owned by the control it landed on until it lifts, so several
 // thumbs work at once. Sticks float: a touch anywhere on an empty half of the
 // screen becomes that side's stick, centred where the thumb landed. Face
-// buttons and the D-pad let a thumb slide from one button to the next.
+// buttons and the D-pad let a thumb slide from one button to the next; the
+// D-pad presses one direction at a time (the stick is there for diagonals).
 // Double-tap and hold a stick to click it (L3 / R3).
+//
+// In editing mode nothing is sent: dragging a control moves it, and the
+// selected control can be resized. The layout is stored as offsets relative to
+// the default position (fractions of the view size), so it survives a
+// different screen.
 class TouchControlsView(context: Context) : View(context) {
 
     var onPadChanged: ((PadState) -> Unit)? = null
     var onMenu: (() -> Unit)? = null
+    // Editing: the control picked up (null when none), and the layout after each change.
+    var onSelectionChanged: ((Group?) -> Unit)? = null
+    var onLayoutChanged: ((String) -> Unit)? = null
+
+    enum class Group(val key: String, val label: String) {
+        LeftStick("ls", "Left stick"), RightStick("rs", "Right stick"), Dpad("dpad", "D-pad"),
+        Face("abxy", "A B X Y"), LeftShoulders("lsh", "ZL and L"), RightShoulders("rsh", "ZR and R"),
+        Minus("minus", "Minus"), Plus("plus", "Plus"), Capture("capture", "Capture"), Home("home", "Home"),
+    }
+
+    private class Placement(var dx: Float = 0f, var dy: Float = 0f, var size: Float = 1f)
+    private val placements = Group.entries.associateWith { Placement() }
+
+    var editing = false
+        set(v) {
+            if (field == v) return
+            field = v
+            releaseAll()
+            select(null)
+            invalidate()
+        }
+    var selected: Group? = null
+        private set
+    private var dragPointer = -1
+    private var dragX = 0f; private var dragY = 0f
 
     var opacity = 0.6f
         set(v) { field = v.coerceIn(0.15f, 1f); invalidate() }
@@ -41,7 +72,7 @@ class TouchControlsView(context: Context) : View(context) {
     private enum class Shape { Round, Rect, Pill }
     private enum class Icon { None, Home, Capture, Menu }
 
-    private class Button(val bit: Int, val label: String, val shape: Shape, val icon: Icon = Icon.None) {
+    private class Button(val bit: Int, val label: String, val shape: Shape, val group: Group?, val icon: Icon = Icon.None) {
         var cx = 0f; var cy = 0f; var rw = 0f; var rh = 0f
         var slack = 1.3f
         fun hit(x: Float, y: Float): Boolean = when (shape) {
@@ -63,21 +94,23 @@ class TouchControlsView(context: Context) : View(context) {
     private val left = Stick(Btn.LSTICK)
     private val right = Stick(Btn.RSTICK)
     private val face = listOf(
-        Button(Btn.A, "A", Shape.Round), Button(Btn.B, "B", Shape.Round),
-        Button(Btn.X, "X", Shape.Round), Button(Btn.Y, "Y", Shape.Round),
+        Button(Btn.A, "A", Shape.Round, Group.Face), Button(Btn.B, "B", Shape.Round, Group.Face),
+        Button(Btn.X, "X", Shape.Round, Group.Face), Button(Btn.Y, "Y", Shape.Round, Group.Face),
     )
     private val shoulders = listOf(
-        Button(Btn.ZL, "ZL", Shape.Pill), Button(Btn.L, "L", Shape.Pill),
-        Button(Btn.ZR, "ZR", Shape.Pill), Button(Btn.R, "R", Shape.Pill),
+        Button(Btn.ZL, "ZL", Shape.Pill, Group.LeftShoulders), Button(Btn.L, "L", Shape.Pill, Group.LeftShoulders),
+        Button(Btn.ZR, "ZR", Shape.Pill, Group.RightShoulders), Button(Btn.R, "R", Shape.Pill, Group.RightShoulders),
     )
     private val system = listOf(
-        Button(Btn.MINUS, "−", Shape.Round), Button(Btn.PLUS, "+", Shape.Round),
-        Button(Btn.CAPTURE, "", Shape.Round, Icon.Capture), Button(Btn.HOME, "", Shape.Round, Icon.Home),
+        Button(Btn.MINUS, "−", Shape.Round, Group.Minus), Button(Btn.PLUS, "+", Shape.Round, Group.Plus),
+        Button(Btn.CAPTURE, "", Shape.Round, Group.Capture, Icon.Capture), Button(Btn.HOME, "", Shape.Round, Group.Home, Icon.Home),
     )
-    private val menu = Button(0, "", Shape.Pill, Icon.Menu)
+    // The menu button stays put so the menu is always reachable.
+    private val menu = Button(0, "", Shape.Pill, null, Icon.Menu)
     private val buttons = face + shoulders + system
 
     private var dpadX = 0f; private var dpadY = 0f; private var dpadSize = 0f
+    private var faceX = 0f; private var faceY = 0f; private var faceR = 0f
 
     private enum class Owner { LeftStick, RightStick, Dpad, Buttons, Menu }
     private class Touch(val owner: Owner, var x: Float, var y: Float)
@@ -91,6 +124,7 @@ class TouchControlsView(context: Context) : View(context) {
         textAlign = Paint.Align.CENTER
         typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
     }
+    private val dashed = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
     private val rect = RectF()
     private val path = Path()
 
@@ -106,52 +140,175 @@ class TouchControlsView(context: Context) : View(context) {
         val u = min(w, h).toFloat()
         val s = scale
         val edge = 0.05f * u
+        fun k(g: Group) = s * placements.getValue(g).size
+        // Default centre moved by the saved offset, kept on screen.
+        fun px(g: Group, x: Float) = (x + placements.getValue(g).dx * w).coerceIn(0f, w.toFloat())
+        fun py(g: Group, y: Float) = (y + placements.getValue(g).dy * h).coerceIn(0f, h.toFloat())
 
+        // Default anchors follow the global size only, so resizing one control never moves another.
         // Right hand: ABXY above, right stick below-left (Switch layout).
-        val d = 0.125f * u * s
-        val r = 0.064f * u * s
-        val fx = w - edge - d - r
-        val fy = h * 0.47f
-        place(face[0], fx + d, fy, r)      // A east
-        place(face[1], fx, fy + d, r)      // B south
-        place(face[2], fx, fy - d, r)      // X north
-        place(face[3], fx - d, fy, r)      // Y west
+        val d0 = 0.125f * u * s
+        val fx0 = w - edge - d0 - 0.064f * u * s
+        val fy0 = h * 0.47f
+        val rsx0 = fx0 - 0.34f * u * s
+        val rsy0 = h - edge - 0.135f * u * s
+
+        faceX = px(Group.Face, fx0); faceY = py(Group.Face, fy0)
+        val d = 0.125f * u * k(Group.Face)
+        val r = 0.064f * u * k(Group.Face)
+        faceR = d + r
+        place(face[0], faceX + d, faceY, r)      // A east
+        place(face[1], faceX, faceY + d, r)      // B south
+        place(face[2], faceX, faceY - d, r)      // X north
+        place(face[3], faceX - d, faceY, r)      // Y west
         face.forEach { it.slack = 1.35f }
 
-        val sr = 0.135f * u * s
-        right.radius = sr
-        right.homeX = fx - 0.34f * u * s
-        right.homeY = h - edge - sr
+        right.radius = 0.135f * u * k(Group.RightStick)
+        right.homeX = px(Group.RightStick, rsx0)
+        right.homeY = py(Group.RightStick, rsy0)
 
         // Left hand mirrors it: stick above, D-pad below-right.
-        left.radius = sr
-        left.homeX = w - fx
-        left.homeY = fy
-        dpadSize = 0.33f * u * s
-        dpadX = w - right.homeX
-        dpadY = right.homeY
+        left.radius = 0.135f * u * k(Group.LeftStick)
+        left.homeX = px(Group.LeftStick, w - fx0)
+        left.homeY = py(Group.LeftStick, fy0)
+        dpadSize = 0.33f * u * k(Group.Dpad)
+        dpadX = px(Group.Dpad, w - rsx0)
+        dpadY = py(Group.Dpad, rsy0)
 
         // Shoulders stacked in the top corners, ZL/ZR outermost.
-        val pw = 0.115f * u * s
-        val ph = 0.048f * u * s
-        val top = edge * 0.6f + ph
-        placeRect(shoulders[0], edge + pw, top, pw, ph)
-        placeRect(shoulders[1], edge + pw, top + 2.9f * ph, pw, ph)
-        placeRect(shoulders[2], w - edge - pw, top, pw, ph)
-        placeRect(shoulders[3], w - edge - pw, top + 2.9f * ph, pw, ph)
+        val pw0 = 0.115f * u * s
+        val ph0 = 0.048f * u * s
+        val top = edge * 0.6f + ph0
+        for ((g, x0, zl, l) in listOf(
+            ShoulderPair(Group.LeftShoulders, edge + pw0, shoulders[0], shoulders[1]),
+            ShoulderPair(Group.RightShoulders, w - edge - pw0, shoulders[2], shoulders[3]),
+        )) {
+            val pw = 0.115f * u * k(g)
+            val ph = 0.048f * u * k(g)
+            val cx = px(g, x0)
+            val cy = py(g, top + 1.45f * ph0)
+            placeRect(zl, cx, cy - 1.45f * ph, pw, ph)
+            placeRect(l, cx, cy + 1.45f * ph, pw, ph)
+        }
         shoulders.forEach { it.slack = 1.25f }
 
-        val sys = 0.042f * u * s
-        place(system[0], w / 2f - 0.17f * u, top, sys)
-        place(system[1], w / 2f + 0.17f * u, top, sys)
-        place(system[2], w / 2f - 0.17f * u, h - top, sys)
-        place(system[3], w / 2f + 0.17f * u, h - top, sys)
+        val sysX = listOf(w / 2f - 0.17f * u, w / 2f + 0.17f * u, w / 2f - 0.17f * u, w / 2f + 0.17f * u)
+        val sysY = listOf(top, top, h - top, h - top)
+        for ((i, b) in system.withIndex()) {
+            val g = b.group!!
+            place(b, px(g, sysX[i]), py(g, sysY[i]), 0.042f * u * k(g))
+        }
         system.forEach { it.slack = 1.4f }
         placeRect(menu, w / 2f, top, 0.055f * u, 0.03f * u)
         menu.slack = 1.6f
 
         for (st in listOf(left, right)) if (st.pointer < 0) resetStick(st)
         invalidate()
+    }
+
+    private data class ShoulderPair(val g: Group, val x: Float, val zl: Button, val l: Button)
+
+    // ---- layout editing -------------------------------------------------------------
+
+    // "key:dx,dy,size;..." for the groups that differ from the default.
+    fun layoutString(): String = placements.entries
+        .filter { (_, p) -> p.dx != 0f || p.dy != 0f || p.size != 1f }
+        .joinToString(";") { (g, p) -> "${g.key}:${p.dx},${p.dy},${p.size}" }
+
+    fun setLayout(str: String) {
+        placements.values.forEach { it.dx = 0f; it.dy = 0f; it.size = 1f }
+        for (entry in str.split(';')) {
+            val (key, values) = entry.split(':').takeIf { it.size == 2 } ?: continue
+            val g = Group.entries.firstOrNull { it.key == key } ?: continue
+            val v = values.split(',').map { it.toFloatOrNull() }
+            if (v.size != 3 || v.any { it == null || it.isNaN() }) continue
+            placements.getValue(g).apply {
+                dx = v[0]!!.coerceIn(-1f, 1f)
+                dy = v[1]!!.coerceIn(-1f, 1f)
+                size = v[2]!!.coerceIn(MIN_GROUP_SIZE, MAX_GROUP_SIZE)
+            }
+        }
+        layoutControls(width, height)
+    }
+
+    fun resetLayout() {
+        setLayout("")
+        onLayoutChanged?.invoke(layoutString())
+    }
+
+    fun groupSize(g: Group): Float = placements.getValue(g).size
+
+    fun setGroupSize(g: Group, v: Float) {
+        placements.getValue(g).size = v.coerceIn(MIN_GROUP_SIZE, MAX_GROUP_SIZE)
+        layoutControls(width, height)
+        onLayoutChanged?.invoke(layoutString())
+    }
+
+    private fun select(g: Group?) {
+        if (selected == g) return
+        selected = g
+        onSelectionChanged?.invoke(g)
+        invalidate()
+    }
+
+    private fun groupAt(x: Float, y: Float): Group? {
+        (system + shoulders).firstOrNull { it.hit(x, y) }?.let { return it.group }
+        return when {
+            hypot(x - faceX, y - faceY) <= faceR * 1.1f -> Group.Face
+            abs(x - dpadX) <= dpadSize * 0.6f && abs(y - dpadY) <= dpadSize * 0.6f -> Group.Dpad
+            hypot(x - left.homeX, y - left.homeY) <= left.radius * 1.1f -> Group.LeftStick
+            hypot(x - right.homeX, y - right.homeY) <= right.radius * 1.1f -> Group.RightStick
+            else -> null
+        }
+    }
+
+    private fun bounds(g: Group, out: RectF) {
+        fun circle(x: Float, y: Float, r: Float) = out.set(x - r, y - r, x + r, y + r)
+        fun union(a: Button, b: Button) = out.set(
+            min(a.cx - a.rw, b.cx - b.rw), min(a.cy - a.rh, b.cy - b.rh),
+            maxOf(a.cx + a.rw, b.cx + b.rw), maxOf(a.cy + a.rh, b.cy + b.rh),
+        )
+        when (g) {
+            Group.LeftStick -> circle(left.homeX, left.homeY, left.radius)
+            Group.RightStick -> circle(right.homeX, right.homeY, right.radius)
+            Group.Dpad -> circle(dpadX, dpadY, dpadSize / 2)
+            Group.Face -> circle(faceX, faceY, faceR)
+            Group.LeftShoulders -> union(shoulders[0], shoulders[1])
+            Group.RightShoulders -> union(shoulders[2], shoulders[3])
+            else -> system.first { it.group == g }.let { circle(it.cx, it.cy, it.rw) }
+        }
+        val pad = 0.012f * min(width, height)
+        out.inset(-pad, -pad)
+    }
+
+    private fun onEditTouch(e: MotionEvent) {
+        when (e.actionMasked) {
+            MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
+                if (dragPointer >= 0) return
+                val i = e.actionIndex
+                val g = groupAt(e.getX(i), e.getY(i))
+                select(g)
+                if (g != null) {
+                    dragPointer = e.getPointerId(i)
+                    dragX = e.getX(i); dragY = e.getY(i)
+                }
+            }
+            MotionEvent.ACTION_MOVE -> {
+                val i = e.findPointerIndex(dragPointer)
+                val g = selected
+                if (i < 0 || g == null || width == 0 || height == 0) return
+                val p = placements.getValue(g)
+                p.dx = (p.dx + (e.getX(i) - dragX) / width).coerceIn(-1f, 1f)
+                p.dy = (p.dy + (e.getY(i) - dragY) / height).coerceIn(-1f, 1f)
+                dragX = e.getX(i); dragY = e.getY(i)
+                layoutControls(width, height)
+            }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP, MotionEvent.ACTION_CANCEL -> {
+                if (e.actionMasked != MotionEvent.ACTION_CANCEL && e.getPointerId(e.actionIndex) != dragPointer) return
+                if (dragPointer >= 0) onLayoutChanged?.invoke(layoutString())
+                dragPointer = -1
+            }
+        }
     }
 
     private fun place(b: Button, x: Float, y: Float, r: Float) { b.cx = x; b.cy = y; b.rw = r; b.rh = r }
@@ -175,6 +332,10 @@ class TouchControlsView(context: Context) : View(context) {
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(e: MotionEvent): Boolean {
+        if (editing) {
+            onEditTouch(e)
+            return true
+        }
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
                 val i = e.actionIndex
@@ -201,7 +362,9 @@ class TouchControlsView(context: Context) : View(context) {
         val owner = when {
             menu.hit(x, y) -> Owner.Menu
             buttons.any { it.hit(x, y) } -> Owner.Buttons
-            abs(x - dpadX) <= dpadSize * 0.65f && abs(y - dpadY) <= dpadSize * 0.65f -> Owner.Dpad
+            // One thumb owns the D-pad, so two touches can't press two directions.
+            abs(x - dpadX) <= dpadSize * 0.65f && abs(y - dpadY) <= dpadSize * 0.65f ->
+                if (touches.values.any { it.owner == Owner.Dpad }) return else Owner.Dpad
             x < width / 2f && left.pointer < 0 -> Owner.LeftStick
             x >= width / 2f && right.pointer < 0 -> Owner.RightStick
             else -> return
@@ -267,17 +430,11 @@ class TouchControlsView(context: Context) : View(context) {
         val dx = (x - dpadX) / (dpadSize / 2)
         val dy = (y - dpadY) / (dpadSize / 2)
         if (hypot(dx, dy) < 0.22f) return 0
-        // 8 sectors of 45 degrees, starting at east.
-        val a = Math.toDegrees(atan2(-dy, dx).toDouble()).let { if (it < 0) it + 360 else it }
-        return when (((a + 22.5) / 45).toInt() % 8) {
-            0 -> Btn.DPAD_RIGHT
-            1 -> Btn.DPAD_RIGHT or Btn.DPAD_UP
-            2 -> Btn.DPAD_UP
-            3 -> Btn.DPAD_UP or Btn.DPAD_LEFT
-            4 -> Btn.DPAD_LEFT
-            5 -> Btn.DPAD_LEFT or Btn.DPAD_DOWN
-            6 -> Btn.DPAD_DOWN
-            else -> Btn.DPAD_DOWN or Btn.DPAD_RIGHT
+        // Four 90 degree sectors: only ever one direction, never a diagonal.
+        return if (abs(dx) >= abs(dy)) {
+            if (dx > 0) Btn.DPAD_RIGHT else Btn.DPAD_LEFT
+        } else {
+            if (dy > 0) Btn.DPAD_DOWN else Btn.DPAD_UP
         }
     }
 
@@ -334,9 +491,24 @@ class TouchControlsView(context: Context) : View(context) {
 
         drawDpad(c, pressed)
 
+        for (b in buttons) {
+            text.textSize = 0.05f * u * scale * (b.group?.let { placements.getValue(it).size } ?: 1f)
+            drawButton(c, b, pressed and b.bit != 0)
+        }
         text.textSize = 0.05f * u * scale
-        for (b in buttons) drawButton(c, b, pressed and b.bit != 0)
         drawButton(c, menu, touches.values.any { it.owner == Owner.Menu })
+
+        if (editing) {
+            // Outline every movable control; the picked-up one in amber.
+            dashed.strokeWidth = 0.005f * u
+            dashed.pathEffect = DashPathEffect(floatArrayOf(0.02f * u, 0.012f * u), 0f)
+            for (g in Group.entries) {
+                bounds(g, rect)
+                val on = g == selected
+                dashed.color = if (on) Color.argb(255, 0xFB, 0xBB, 0x04) else Color.argb(150, 255, 255, 255)
+                c.drawRoundRect(rect, 0.02f * u, 0.02f * u, dashed)
+            }
+        }
     }
 
     private fun drawButton(c: Canvas, b: Button, on: Boolean) {
@@ -450,5 +622,7 @@ class TouchControlsView(context: Context) : View(context) {
     companion object {
         private const val STICK_DEADZONE = 0.08f
         private const val DOUBLE_TAP_MS = 280L
+        const val MIN_GROUP_SIZE = 0.5f
+        const val MAX_GROUP_SIZE = 1.8f
     }
 }

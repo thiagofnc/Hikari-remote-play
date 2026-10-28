@@ -199,7 +199,7 @@ The **stream preset** controls how the host encodes and adapts. The values below
 | --- | --- | --- | --- | --- |
 | **Minimum Latency** | 12 Mbps | 20 Mbps | 6 ms | Fighting games, rhythm games, competitive play |
 | **Balanced** *(default)* | 16 Mbps | 30 Mbps | 12 ms | Most games, most connections |
-| **Quality** | 25 Mbps | 50 Mbps | 25 ms | Slow-paced games on a fast, stable link |
+| **Quality** | 24 Mbps | 50 Mbps | 25 ms | Slow-paced games on a fast, stable link |
 
 The **display mode** (<kbd>F2</kbd>) is a separate setting. It controls only how the client presents frames: *Minimum Latency* allows tearing, *Balanced* is v-synced with a one-frame queue, and *Smooth* adds a small pacing buffer.
 

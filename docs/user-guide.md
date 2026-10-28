@@ -147,7 +147,7 @@ How the host encodes and adapts to the network:
 | --- | --- | --- | --- |
 | **Minimum Latency** | 12 → 20 Mbps | 6 ms | Fighting and rhythm games, competitive play |
 | **Balanced** *(default)* | 16 → 30 Mbps | 12 ms | Almost everything |
-| **Quality** | 25 → 50 Mbps | 25 ms | Slow-paced games on a fast, clean connection |
+| **Quality** | 24 → 50 Mbps | 25 ms | Slow-paced games on a fast, clean connection |
 
 With every preset, the host lowers the bitrate when the network fills up and steps resolution down (1080p60 → 900p60 → 720p60) **before** it gives up 60 fps. 720p30 is the last resort. You can also set a **maximum bitrate**, which is useful on metered or shared connections.
 

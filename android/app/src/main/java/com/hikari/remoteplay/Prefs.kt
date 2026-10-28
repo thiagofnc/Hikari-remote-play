@@ -35,12 +35,23 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("haptics", true)
         set(v) = sp.edit().putBoolean("haptics", v).apply()
 
-    // Full screen stretches the picture to the display; off keeps its 16:9 shape with bars.
-    var fullScreen: Boolean
-        get() = sp.getBoolean("full_screen", true)
-        set(v) = sp.edit().putBoolean("full_screen", v).apply()
+    // Where each touch control sits and how big it is (TouchControlsView.layoutString()).
+    var controlsLayout: String
+        get() = sp.getString("controls_layout", "") ?: ""
+        set(v) = sp.edit().putString("controls_layout", v).apply()
+
+    var pictureMode: PictureMode
+        get() = PictureMode.entries.getOrElse(sp.getInt("picture_mode", PictureMode.Fit.ordinal)) { PictureMode.Fit }
+        set(v) = sp.edit().putInt("picture_mode", v.ordinal).apply()
 
     var showStats: Boolean
         get() = sp.getBoolean("show_stats", false)
         set(v) = sp.edit().putBoolean("show_stats", v).apply()
+}
+
+// How the 16:9 picture uses a phone screen that is usually wider than that.
+enum class PictureMode(val label: String) {
+    Fit("Fit"),          // as large as possible without cropping or distortion
+    Fill("Zoom"),        // fills the screen, trimming the top and bottom edges
+    Stretch("Stretch"),  // fills the screen, widening the picture
 }

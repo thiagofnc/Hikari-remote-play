@@ -84,6 +84,8 @@ private:
     void do_action(int action);  // UI thread
     void set_screen(Screen s);
     void toggle_fullscreen();
+    void fit_window_to_stream();
+    void restore_lobby_window();
     void update_sending();
     void toast(const std::string& msg, double seconds = 3.0);
     void on_key(UINT vk, bool down);
@@ -124,6 +126,8 @@ private:
     std::atomic<bool> screenshot_{false};
     std::atomic<bool> need_keyframe_{false};
     RECT windowed_rect_{};
+    RECT lobby_rect_{};             // UI thread: window before fit_window_to_stream()
+    bool have_lobby_rect_ = false;
     LONG windowed_style_ = 0;
     uint64_t start_qpc_us_ = 0;
 

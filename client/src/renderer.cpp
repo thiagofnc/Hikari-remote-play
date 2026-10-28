@@ -29,6 +29,8 @@ VSOut main(uint id : SV_VertexID) {
 // Luma is scaled with Catmull-Rom (9 bilinear taps): it keeps edges and text
 // crisp when the picture is scaled or stretched, and returns the exact pixels
 // at 1:1. Chroma is half resolution and stays bilinear.
+// A light, clamped unsharp mask on top restores detail the encoder softens,
+// without ringing around hard edges.
 const char* kPS = R"(
 Texture2D<float> texY : register(t0);
 Texture2D<float2> texUV : register(t1);
@@ -55,7 +57,13 @@ float catmull_rom(float2 uv) {
     return y;
 }
 float4 main(float4 pos : SV_Position, float2 uv : TEXCOORD0) : SV_Target {
+    float tw, th;
+    texY.GetDimensions(tw, th);
+    float2 t = 1.0 / float2(tw, th);
     float y = catmull_rom(uv);
+    float n = texY.Sample(samp, uv + float2(0, -t.y)) + texY.Sample(samp, uv + float2(0, t.y)) +
+              texY.Sample(samp, uv + float2(-t.x, 0)) + texY.Sample(samp, uv + float2(t.x, 0));
+    y += clamp((y - 0.25 * n) * 0.45, -0.04, 0.04);
     float2 c = texUV.Sample(samp, uv) - 0.5;
     y = (y - 16.0 / 255.0) * (255.0 / 219.0);
     c *= 255.0 / 224.0;
