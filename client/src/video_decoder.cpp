@@ -52,7 +52,7 @@ void VideoDecoder::close()
     failed_ = false;
 }
 
-bool VideoDecoder::open(GpuDevice& gpu, proto::VideoCodec codec)
+bool VideoDecoder::open(GpuDevice& gpu, proto::VideoCodec codec, UINT width, UINT height)
 {
     close();
     gpu_ = &gpu;
@@ -105,6 +105,8 @@ bool VideoDecoder::open(GpuDevice& gpu, proto::VideoCodec codec)
     it->SetGUID(MF_MT_SUBTYPE, sub);
     it->SetUINT32(MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive);
     MFSetAttributeRatio(it.Get(), MF_MT_FRAME_RATE, 60, 1);
+    // The HEVC decoder crashes in BEGIN_STREAMING without a frame size.
+    MFSetAttributeSize(it.Get(), MF_MT_FRAME_SIZE, width, height);
     HK_CHECK_HR(transform_->SetInputType(0, it.Get(), 0), "Decoder SetInputType");
     if (!configure_output()) return false;
     transform_->ProcessMessage(MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, 0);

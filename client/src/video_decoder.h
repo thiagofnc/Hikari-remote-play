@@ -30,7 +30,8 @@ class VideoDecoder {
 public:
     ~VideoDecoder();
 
-    bool open(GpuDevice& gpu, proto::VideoCodec codec);
+    // width/height: the stream size; the decoder follows in-band size changes.
+    bool open(GpuDevice& gpu, proto::VideoCodec codec, UINT width = 1920, UINT height = 1080);
     void close();
     bool is_open() const { return transform_ != nullptr; }
     proto::VideoCodec codec() const { return codec_; }

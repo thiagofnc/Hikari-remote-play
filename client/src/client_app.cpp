@@ -875,7 +875,7 @@ void ClientApp::render_thread()
         while (auto item = net_.frames().pop()) {
             std::unique_ptr<AssembledFrame> f = std::move(*item);
             if (!decoder_.is_open() || decoder_.codec() != sc.codec) {
-                if (!decoder_.open(gpu_, sc.codec)) {
+                if (!decoder_.open(gpu_, sc.codec, sc.width, sc.height)) {
                     net_.recycle(std::move(f));
                     continue;
                 }
@@ -892,7 +892,7 @@ void ClientApp::render_thread()
             const bool ok = decoder_.decode(f->data.data(), f->data.size(), f->capture_us, out);
             if (decoder_.failed()) {
                 HK_LOGW("Decoder error; resetting and requesting a keyframe");
-                decoder_.open(gpu_, sc.codec);
+                decoder_.open(gpu_, sc.codec, sc.width, sc.height);
                 need_keyframe_ = true;
                 net_.request_keyframe(2);
             } else if (ok) {
