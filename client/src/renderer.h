@@ -31,9 +31,12 @@ public:
     void resize();
     void set_mode(PresentMode m) { mode_ = m; }
     PresentMode mode() const { return mode_; }
+    // Stretch the picture to fill the window instead of letterboxing it.
+    void set_stretch(bool on) { stretch_ = on; }
+    bool stretch() const { return stretch_; }
     bool tearing_supported() const { return tearing_; }
 
-    // Draws the last video frame (if any) letterboxed, then the 2D layer, then presents.
+    // Draws the last video frame (if any) letterboxed or stretched, then the 2D layer, then presents.
     // `video` may be null (lobby).
     void render(ID3D11Texture2D* video, UINT vw, UINT vh, const Draw2D& draw2d, double time_s, bool paced_ui = false);
     // Blocks until the swap chain can accept a frame (Smooth mode pacing).
@@ -55,6 +58,7 @@ private:
     HANDLE waitable_ = nullptr;
     bool tearing_ = false;
     std::atomic<PresentMode> mode_{PresentMode::Balanced};
+    std::atomic<bool> stretch_{false};
     UINT width_ = 0, height_ = 0;
     float dpi_scale_ = 1.0f;
 

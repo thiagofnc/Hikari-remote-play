@@ -64,6 +64,7 @@ private:
         kActEndAsk,      // show the end-stream confirmation
         kActEndCancel,   // back from the confirmation
         kActEndConfirm,  // end the stream; the session stays ready to resume
+        kActStretch,     // fill the whole window instead of keeping 16:9
     };
 
     void load_settings();

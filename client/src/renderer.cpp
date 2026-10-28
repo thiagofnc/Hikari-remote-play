@@ -3,6 +3,7 @@
 #include <d3dcompiler.h>
 #include <wincodec.h>
 
+#include <cmath>
 #include <cstring>
 #include <vector>
 
@@ -25,12 +26,36 @@ VSOut main(uint id : SV_VertexID) {
 })";
 
 // BT.709 limited range YCbCr -> RGB (what the Switch outputs over HDMI).
+// Luma is scaled with Catmull-Rom (9 bilinear taps): it keeps edges and text
+// crisp when the picture is scaled or stretched, and returns the exact pixels
+// at 1:1. Chroma is half resolution and stays bilinear.
 const char* kPS = R"(
 Texture2D<float> texY : register(t0);
 Texture2D<float2> texUV : register(t1);
 SamplerState samp : register(s0);
+float catmull_rom(float2 uv) {
+    float2 size;
+    texY.GetDimensions(size.x, size.y);
+    float2 p = uv * size;
+    float2 t1 = floor(p - 0.5) + 0.5;
+    float2 f = p - t1;
+    float2 w0 = f * (-0.5 + f * (1.0 - 0.5 * f));
+    float2 w1 = 1.0 + f * f * (-2.5 + 1.5 * f);
+    float2 w2 = f * (0.5 + f * (2.0 - 1.5 * f));
+    float2 w3 = f * f * (-0.5 + 0.5 * f);
+    float2 w12 = w1 + w2;
+    float2 t0 = (t1 - 1.0) / size, t3 = (t1 + 2.0) / size, t12 = (t1 + w2 / w12) / size;
+    float y = 0;
+    y += (texY.SampleLevel(samp, float2(t0.x, t0.y), 0) * w0.x + texY.SampleLevel(samp, float2(t12.x, t0.y), 0) * w12.x +
+          texY.SampleLevel(samp, float2(t3.x, t0.y), 0) * w3.x) * w0.y;
+    y += (texY.SampleLevel(samp, float2(t0.x, t12.y), 0) * w0.x + texY.SampleLevel(samp, float2(t12.x, t12.y), 0) * w12.x +
+          texY.SampleLevel(samp, float2(t3.x, t12.y), 0) * w3.x) * w12.y;
+    y += (texY.SampleLevel(samp, float2(t0.x, t3.y), 0) * w0.x + texY.SampleLevel(samp, float2(t12.x, t3.y), 0) * w12.x +
+          texY.SampleLevel(samp, float2(t3.x, t3.y), 0) * w3.x) * w3.y;
+    return y;
+}
 float4 main(float4 pos : SV_Position, float2 uv : TEXCOORD0) : SV_Target {
-    float y = texY.Sample(samp, uv);
+    float y = catmull_rom(uv);
     float2 c = texUV.Sample(samp, uv) - 0.5;
     y = (y - 16.0 / 255.0) * (255.0 / 219.0);
     c *= 255.0 / 224.0;
@@ -200,19 +225,19 @@ void Renderer::render(ID3D11Texture2D* video, UINT vw, UINT vh, const Draw2D& dr
     ctx->ClearRenderTargetView(rtv_.Get(), black);
 
     if (video && vw && vh && ensure_video_views(video)) {
-        // Letterbox to the stream's aspect ratio.
-        const float sa = float(vw) / vh, wa = float(width_) / height_;
-        D3D11_VIEWPORT vp{};
-        if (wa > sa) {
-            vp.Height = float(height_);
-            vp.Width = height_ * sa;
-            vp.TopLeftX = (width_ - vp.Width) / 2;
-        } else {
-            vp.Width = float(width_);
-            vp.Height = width_ / sa;
-            vp.TopLeftY = (height_ - vp.Height) / 2;
+        // Stretch fills the window; otherwise letterbox to the stream's aspect
+        // ratio. Whole-pixel edges keep a 1:1 picture from being resampled.
+        D3D11_VIEWPORT vp{0, 0, float(width_), float(height_), 0, 1};
+        if (!stretch_) {
+            const double sa = double(vw) / vh, wa = double(width_) / height_;
+            if (wa > sa) {
+                vp.Width = std::round(height_ * sa);
+                vp.TopLeftX = std::floor((width_ - vp.Width) / 2);
+            } else {
+                vp.Height = std::round(width_ / sa);
+                vp.TopLeftY = std::floor((height_ - vp.Height) / 2);
+            }
         }
-        vp.MaxDepth = 1;
         ctx->OMSetRenderTargets(1, rtv_.GetAddressOf(), nullptr);
         ctx->RSSetViewports(1, &vp);
         ctx->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);

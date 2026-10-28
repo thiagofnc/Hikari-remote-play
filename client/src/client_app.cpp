@@ -100,6 +100,7 @@ void ClientApp::load_settings()
                        : pm == "smooth"  ? PresentMode::Smooth
                        : pm == "balanced" ? PresentMode::Balanced
                                           : present_for(preset_));
+    renderer_.set_stretch(cfg_->get_bool("client", "stretch", false));
     audio_.set_target_ms(audio_ms_for(preset_));
     net_.set_reorder_window(reorder_for(preset_));
 }
@@ -436,6 +437,14 @@ void ClientApp::do_action(int action)
     }
     case kActFullscreen: toggle_fullscreen(); break;
     case kActStats: show_stats_ = !show_stats_; break;
+    case kActStretch: {
+        const bool on = !renderer_.stretch();
+        renderer_.set_stretch(on);
+        cfg_->set_bool("client", "stretch", on);
+        cfg_->save();
+        if (!menu_open_) toast(on ? "Picture fills the whole screen" : "Picture keeps its 16:9 shape");
+        break;
+    }
     case kActScreenshot: screenshot_ = true; break;
     case kActMenu:
         if (menu_open_) close_menu();
@@ -446,7 +455,8 @@ void ClientApp::do_action(int action)
     case kActEndCancel: {
         std::lock_guard<std::mutex> lk(mu_);
         menu_confirm_ = action == kActEndAsk;
-        menu_sel_ = menu_confirm_ ? 1 : 4;  // confirmation defaults to End stream; cancel returns to it
+        // Confirmation defaults to End stream; cancel returns to it.
+        menu_sel_ = menu_confirm_ ? 1 : static_cast<int>(menu_items().size()) - 1;
         break;
     }
     case kActEndConfirm:
@@ -515,7 +525,7 @@ void ClientApp::close_menu()
 std::vector<int> ClientApp::menu_items()
 {
     if (menu_confirm_) return {kActEndCancel, kActEndConfirm};
-    return {kActResume, kActStats, kActController, kActFullscreen, kActEndAsk};
+    return {kActResume, kActStats, kActController, kActFullscreen, kActStretch, kActEndAsk};
 }
 
 void ClientApp::menu_key(UINT vk)
@@ -537,6 +547,7 @@ void ClientApp::menu_key(UINT vk)
         else if (vk == 'C' && ctrl && alt && !menu_confirm_) activate = kActController;
         else if (vk == VK_F1) activate = kActStats;
         else if (vk == VK_F11) activate = kActFullscreen;
+        else if (vk == VK_F3) activate = kActStretch;
     }
     if (activate != kActNone) do_action(activate);
 }
@@ -600,6 +611,10 @@ void ClientApp::on_key(UINT vk, bool down)
         }
         if (vk == VK_F1) {
             show_stats_ = !show_stats_;
+            return;
+        }
+        if (vk == VK_F3) {
+            do_action(kActStretch);
             return;
         }
         if (vk == VK_F2) {
@@ -1174,6 +1189,7 @@ void ClientApp::draw_stream_menu(ui::Painter& p, const Rect& r)
             if (p.button(ui_, id, row, "", selected ? ButtonStyle::Secondary : ButtonStyle::Ghost)) post_action(id);
             const char* label = id == kActResume ? "Resume" : id == kActStats ? (show_stats_ ? "Hide stats" : "Show stats")
                 : id == kActController ? "Controller settings" : id == kActFullscreen ? (fullscreen_ ? "Exit full screen" : "Full screen")
+                : id == kActStretch ? (renderer_.stretch() ? "Keep the 16:9 shape" : "Fill the whole screen")
                 : "End stream";
             p.text(label, {in, row.t, out - p.s(120), row.b}, p.s(14), ui::rgb(id == kActEndAsk ? 0xFF8A80 : th::kText), Weight::Medium);
             const float cy = row.cy() - p.s(1);
@@ -1181,6 +1197,7 @@ void ClientApp::draw_stream_menu(ui::Painter& p, const Rect& r)
             else if (id == kActStats) keys(out, cy, {"F1"});
             else if (id == kActController) keys(out, cy, {"Ctrl", "Alt", "C"});
             else if (id == kActFullscreen) keys(out, cy, {"F11"});
+            else if (id == kActStretch) keys(out, cy, {"F3"});
             else if (id == kActEndAsk) keys(out, cy, {"Ctrl", "Alt", "Q"});
             y += row_h;
         }
