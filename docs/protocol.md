@@ -450,6 +450,7 @@ Smoothing: loss uses fast attack (α = 0.5) and slow release (α = 0.15). Queuei
 | --- | --- |
 | `congested` = qdelay > preset limit **or** decode queue > 2 | bitrate × 0.85, and no higher than 90 % of what actually arrived. At most every 250 ms. |
 | `heavy_loss` = smoothed loss > 8 % | bitrate × 0.7. At most every 250 ms. |
+| more than 1 % of frames lost after FEC, for 1 s | bitrate × 0.85. At most every second. |
 | clean (not congested, loss < 2 %) for 1 s, 2 s after the last decrease | bitrate × 1.08 + 300 kbps. At most every 500 ms, capped at the preset max. |
 
 | Preset | Start | Max | Queueing-delay limit |

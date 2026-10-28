@@ -103,6 +103,10 @@ AbrDecision AdaptiveBitrate::on_report(const proto::ReceiverReport& r, uint64_t 
 
     const bool congested = qdelay_ > cfg_.queue_delay_limit_us || r.decode_queue > 2;
     const bool heavy_loss = loss_ > 0.08;
+    // Frames that FEC could not repair. Each one stalls the picture until the
+    // next keyframe, so even a few percent of them halves the frame rate.
+    const double frames = double(r.frames_complete) + double(r.frames_dropped);
+    const bool losing_frames = frames > 0 && r.frames_dropped / frames > 0.01;
 
     if ((congested || heavy_loss) && now - last_decrease_ > 250'000) {
         // Don't go below what actually got through, minus a margin.
@@ -111,7 +115,18 @@ AbrDecision AdaptiveBitrate::on_report(const proto::ReceiverReport& r, uint64_t 
         bitrate_ = std::max<double>(cfg_.min_kbps, target);
         last_decrease_ = now;
         clean_since_ = 0;
+        lossy_since_ = 0;
+    } else if (losing_frames) {
+        // Steady loss below the heavy threshold: the link can't carry this
+        // rate cleanly. Step down once a second until frames get through.
+        clean_since_ = 0;
+        if (!lossy_since_) lossy_since_ = now;
+        if (now - lossy_since_ > 1'000'000 && now - last_decrease_ > 1'000'000) {
+            bitrate_ = std::max<double>(cfg_.min_kbps, bitrate_ * 0.85);
+            last_decrease_ = now;
+        }
     } else if (!congested && loss_ < 0.02) {
+        lossy_since_ = 0;
         if (!clean_since_) clean_since_ = now;
         // Probe upward gently after one clean second, at most every 500 ms.
         if (now - clean_since_ > 1'000'000 && now - last_increase_ > 500'000 && now - last_decrease_ > 2'000'000) {
@@ -120,6 +135,7 @@ AbrDecision AdaptiveBitrate::on_report(const proto::ReceiverReport& r, uint64_t 
         }
     } else {
         clean_since_ = 0;
+        lossy_since_ = 0;
     }
 
     // FEC follows residual random loss (loss without queueing = not congestion).

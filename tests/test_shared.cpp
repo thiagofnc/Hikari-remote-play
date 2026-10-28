@@ -2,6 +2,7 @@
 
 #include <cstring>
 
+#include "hikari/abr.h"
 #include "hikari/crypto.h"
 #include "hikari/histogram.h"
 #include "hikari/invite.h"
@@ -307,6 +308,31 @@ TEST(protocol_probe_and_bye_extensions)
     proto::Welcome wo;
     CHECK(proto::read(r4, wo));
     CHECK(std::strcmp(wo.host_name, "Living room") == 0);
+}
+
+// A few percent of packets lost (below the heavy-loss threshold) still costs
+// whole frames; the bitrate must come down instead of sitting at the cap.
+TEST(abr_backs_off_when_frames_are_lost)
+{
+    AdaptiveBitrate abr;
+    const AbrConfig cfg = AdaptiveBitrate::preset_config(proto::Preset::Quality, 0);
+    abr.reset(cfg, VideoMode{});
+    proto::ReceiverReport r;
+    r.interval_us = 100'000;
+    r.bytes_received = 300'000;
+    uint64_t now = 1'000'000;
+    for (int i = 0; i < 100; ++i, now += 100'000) {  // clean: probes up to the cap
+        r.packets_received = 400;
+        r.frames_complete = 6;
+        abr.on_report(r, now);
+    }
+    CHECK_EQ(abr.current().bitrate_kbps, cfg.max_kbps);
+    r.packets_received = 388;
+    r.packets_lost = 12;  // 3 %
+    r.frames_complete = 5;
+    r.frames_dropped = 1;
+    for (int i = 0; i < 50; ++i, now += 100'000) abr.on_report(r, now);
+    CHECK(abr.current().bitrate_kbps < cfg.max_kbps * 0.6);
 }
 
 int main(int argc, char** argv) { return hktest::run_all(argc > 1 ? argv[1] : nullptr); }
